@@ -1,6 +1,5 @@
-import type { NextConfig } from 'next';
-
-const config: NextConfig = {
+/** @type {import('next').NextConfig} */
+const config = {
   output: process.env.NEXT_OUTPUT === 'standalone' ? 'standalone' : undefined,
   async rewrites() {
     // Proxy /api/* → FastAPI backend (strips /api prefix)
