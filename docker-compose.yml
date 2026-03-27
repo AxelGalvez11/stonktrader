@@ -1,0 +1,50 @@
+version: '3.9'
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: market_radar
+      POSTGRES_USER: market_radar
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-market_radar_dev}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U market_radar"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://market_radar:${POSTGRES_PASSWORD:-market_radar_dev}@db:5432/market_radar
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        NEXT_OUTPUT: standalone
+    restart: unless-stopped
+    environment:
+      API_URL: http://backend:8000
+      NEXT_OUTPUT: standalone
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:

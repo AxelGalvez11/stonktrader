@@ -124,3 +124,4 @@ StockTraderApp/
 
 Each provider file (`backend/app/providers/`) has clearly marked `# INTEGRATION POINT` comments showing exactly where to add real API calls. The demo/live split is controlled by `settings.demo_mode`.
 # stonktrader
+# stonktrader
