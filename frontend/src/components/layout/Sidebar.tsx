@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
   LayoutDashboard, TrendingUp, Zap, Activity,
-  Star, BookOpen, BarChart2, Settings, Radio,
+  Star, BookOpen, BarChart2, Settings, Radio, Gauge,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -13,6 +13,7 @@ const NAV = [
   { href: '/stocks',       label: 'Stocks',       icon: TrendingUp },
   { href: '/memecoins',    label: 'Meme Coins',   icon: Zap },
   { href: '/polymarket',   label: 'Polymarket',   icon: Activity },
+  { href: '/kalshi',       label: 'Kalshi',        icon: Gauge },
   { href: '/watchlist',    label: 'Watchlist',    icon: Star },
   { href: '/paper-trades', label: 'Paper Trades', icon: BookOpen },
   { href: '/diagnostics',  label: 'Diagnostics',  icon: BarChart2 },

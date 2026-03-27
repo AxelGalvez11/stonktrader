@@ -8,7 +8,7 @@ import LoadingRows from '@/components/ui/LoadingRows';
 import Empty from '@/components/ui/Empty';
 import { cn } from '@/lib/utils';
 
-type SortKey = 'probability' | 'volume_24h' | 'liquidity';
+type SortKey = 'probability' | 'volume_24h' | 'probability_change_24h';
 
 function SortIcon({ active, dir }: { active: boolean; dir: 'asc' | 'desc' }) {
   if (!active) return <ArrowUpDown className="w-3 h-3 opacity-30" />;
@@ -30,7 +30,8 @@ function ProbBar({ prob }: { prob: number }) {
   );
 }
 
-function formatVol(n: number) {
+function formatVol(n: number | undefined | null) {
+  if (n == null || isNaN(n)) return '—';
   if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`;
   if (n >= 1_000) return `$${(n / 1_000).toFixed(0)}K`;
   return `$${n.toFixed(0)}`;
@@ -85,9 +86,9 @@ export default function SignalTable({ signals, loading }: Props) {
                 className="px-3 py-2 text-xs font-medium text-zinc-500 cursor-pointer hover:text-zinc-300 select-none text-right">
                 <span className="inline-flex items-center gap-1 justify-end">Vol 24H <SortIcon active={sortKey === 'volume_24h'} dir={sortDir} /></span>
               </th>
-              <th onClick={() => handleSort('liquidity')}
+              <th onClick={() => handleSort('probability_change_24h')}
                 className="px-3 py-2 text-xs font-medium text-zinc-500 cursor-pointer hover:text-zinc-300 select-none text-right">
-                <span className="inline-flex items-center gap-1 justify-end">Liquidity <SortIcon active={sortKey === 'liquidity'} dir={sortDir} /></span>
+                <span className="inline-flex items-center gap-1 justify-end">24H Δ <SortIcon active={sortKey === 'probability_change_24h'} dir={sortDir} /></span>
               </th>
               <th className="px-3 py-2 text-xs font-medium text-zinc-500">Closes</th>
             </tr>
@@ -105,8 +106,10 @@ export default function SignalTable({ signals, loading }: Props) {
                 </td>
                 <td className="px-3 py-2.5"><ProbBar prob={s.probability} /></td>
                 <td className="px-3 py-2.5 text-right font-mono text-xs text-zinc-300">{formatVol(s.volume_24h)}</td>
-                <td className="px-3 py-2.5 text-right font-mono text-xs text-zinc-300">{formatVol(s.liquidity)}</td>
-                <td className="px-3 py-2.5 text-xs text-zinc-500">{s.closes_at ? new Date(s.closes_at).toLocaleDateString() : '—'}</td>
+                <td className={`px-3 py-2.5 text-right font-mono text-xs ${s.probability_change_24h > 0 ? 'text-emerald-400' : s.probability_change_24h < 0 ? 'text-red-400' : 'text-zinc-500'}`}>
+                  {s.probability_change_24h != null ? `${s.probability_change_24h > 0 ? '+' : ''}${(s.probability_change_24h * 100).toFixed(1)}%` : '—'}
+                </td>
+                <td className="px-3 py-2.5 text-xs text-zinc-500">{s.close_time ? new Date(s.close_time).toLocaleDateString() : '—'}</td>
               </tr>
             ))}
           </tbody>

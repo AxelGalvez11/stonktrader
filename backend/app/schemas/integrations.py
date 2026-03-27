@@ -20,6 +20,12 @@ class IntegrationRead(BaseModel):
     config: dict[str, str] = {}
     last_tested_at: datetime | None
     error_message: str | None
+    # Catalog metadata (derived from _CATALOG, not stored in DB)
+    features: list[str] = []
+    demo_available: bool = True
+    deferred: bool = False
+    api_key_label: str = "API Key"
+    config_fields: list[dict] = []
 
 
 class IntegrationTestResult(BaseModel):

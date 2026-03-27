@@ -161,6 +161,13 @@ export interface AppSettings {
 }
 
 // ── Integrations ─────────────────────────────────────────────────────────
+export interface IntegrationConfigField {
+  key: string;
+  label: string;
+  hint: string;
+  secret: boolean;
+}
+
 export interface Integration {
   name: string;
   display_name: string;
@@ -171,10 +178,37 @@ export interface Integration {
   config: Record<string, string>;
   last_tested_at: string | null;
   error_message: string | null;
+  // Catalog metadata
+  features: string[];
+  demo_available: boolean;
+  deferred: boolean;
+  api_key_label: string;
+  config_fields: IntegrationConfigField[];
 }
 
 export interface IntegrationTestResult {
   success: boolean;
   message: string;
   latency_ms: number | null;
+}
+
+// ── Kalshi ────────────────────────────────────────────────────────────────
+export interface KalshiMarket {
+  id: string;
+  ticker: string;
+  title: string;
+  subtitle: string | null;
+  category: string;
+  series_ticker: string | null;
+  status: string;
+  yes_price: number;      // 0–1 implied probability
+  no_price: number;
+  volume: number;
+  volume_24h: number;
+  price_change_24h: number;
+  close_time: string | null;
+  related_assets: string[];
+  linked_theme: string;
+  notes: string;
+  source: string;         // "demo" | "live" | "production"
 }

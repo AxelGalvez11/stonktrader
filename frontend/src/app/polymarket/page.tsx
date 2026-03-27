@@ -6,13 +6,13 @@ import TopBar from '@/components/layout/TopBar';
 import SignalTable from '@/components/polymarket/SignalTable';
 
 export default function PolymarketPage() {
-  const { data, loading } = useApi(() => polymarketApi.getSignals(), []);
+  const { data, loading } = useApi(() => polymarketApi.signals(), []);
 
   return (
     <div>
       <TopBar title="Polymarket" subtitle="Prediction market signals" meta={data?.meta} />
       <div className="p-6">
-        <SignalTable signals={data?.items ?? []} loading={loading} />
+        <SignalTable signals={data?.data ?? []} loading={loading} />
       </div>
     </div>
   );

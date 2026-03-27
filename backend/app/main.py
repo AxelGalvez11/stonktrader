@@ -9,6 +9,7 @@ from app.routers import (
     stocks,
     memecoins,
     polymarket,
+    kalshi,
     watchlist,
     paper_trades,
     diagnostics,
@@ -52,6 +53,7 @@ app.add_middleware(
 app.include_router(stocks.router)
 app.include_router(memecoins.router)
 app.include_router(polymarket.router)
+app.include_router(kalshi.router)
 app.include_router(watchlist.router)
 app.include_router(paper_trades.router)
 app.include_router(diagnostics.router)

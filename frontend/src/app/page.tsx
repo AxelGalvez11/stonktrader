@@ -9,27 +9,22 @@ import { ScoreBadge, RiskBadge } from '@/components/ui/Badge';
 import { cn, formatPct, pctColor } from '@/lib/utils';
 
 export default function OverviewPage() {
-  const stocks = useApi(() => stocksApi.getRankings(), []);
-  const coins = useApi(() => memecoinsApi.getRankings(), []);
+  const stocks = useApi(() => stocksApi.rankings(), []);
+  const coins = useApi(() => memecoinsApi.rankings(), []);
   const watchlist = useApi(() => watchlistApi.list(), []);
 
-  const topStocks = (stocks.data?.items ?? []).slice(0, 5);
-  const topCoins = (coins.data?.items ?? []).slice(0, 5);
+  const topStocks = (stocks.data?.data ?? []).slice(0, 5);
+  const topCoins = (coins.data?.data ?? []).slice(0, 5);
   const wlCount = watchlist.data?.length ?? 0;
-  const stockCount = stocks.data?.items.length ?? 0;
-  const coinCount = coins.data?.items.length ?? 0;
+  const stockCount = stocks.data?.data.length ?? 0;
+  const coinCount = coins.data?.data.length ?? 0;
   const meta = stocks.data?.meta;
 
   return (
     <div>
-      <TopBar
-        title="Market Radar"
-        subtitle="Overview"
-        meta={meta}
-      />
+      <TopBar title="Market Radar" subtitle="Overview" meta={meta} />
 
       <div className="p-6 space-y-6">
-        {/* Summary cards */}
         <div className="grid grid-cols-3 gap-4">
           <StatCard label="Stocks Ranked" value={stockCount} loading={stocks.loading} />
           <StatCard label="Meme Coins Ranked" value={coinCount} loading={coins.loading} />
@@ -37,7 +32,6 @@ export default function OverviewPage() {
         </div>
 
         <div className="grid grid-cols-2 gap-6">
-          {/* Top stocks */}
           <div className="bg-zinc-900 rounded-lg border border-zinc-800 p-4">
             <div className="flex items-center justify-between mb-3">
               <div className="text-xs font-medium text-zinc-500 uppercase tracking-wide">Top Stocks</div>
@@ -56,7 +50,6 @@ export default function OverviewPage() {
             ))}
           </div>
 
-          {/* Top coins */}
           <div className="bg-zinc-900 rounded-lg border border-zinc-800 p-4">
             <div className="flex items-center justify-between mb-3">
               <div className="text-xs font-medium text-zinc-500 uppercase tracking-wide">Top Meme Coins</div>

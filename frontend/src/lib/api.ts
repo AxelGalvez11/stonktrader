@@ -2,6 +2,7 @@ import type {
   RankedResponse, StockRanking, MemeCoinRanking, PolymarketSignal,
   WatchlistItem, WatchlistItemCreate, PaperTrade, PaperTradeCreate,
   DiagnosticsResult, AppSettings, Integration, IntegrationTestResult,
+  KalshiMarket,
 } from '@/types';
 
 const BASE = '/api';
@@ -93,4 +94,26 @@ export const integrationsApi = {
   update: (name: string, body: { enabled?: boolean; api_key?: string; config?: Record<string,string> }) =>
     request<Integration>(`/integrations/${name}`, { method: 'PUT', body: JSON.stringify(body) }),
   test:   (name: string)                                             => request<IntegrationTestResult>(`/integrations/${name}/test`, { method: 'POST' }),
+};
+
+// ── Kalshi ────────────────────────────────────────────────────────────────
+export const kalshiApi = {
+  signals: (params?: { category?: string; search?: string; limit?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.category) q.set('category', params.category);
+    if (params?.search)   q.set('search',   params.search);
+    if (params?.limit)    q.set('limit',    String(params.limit));
+    return request<RankedResponse<KalshiMarket>>(`/kalshi/signals?${q}`);
+  },
+  markets: (params?: { category?: string; search?: string; limit?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.category) q.set('category', params.category);
+    if (params?.search)   q.set('search',   params.search);
+    if (params?.limit)    q.set('limit',    String(params.limit));
+    return request<RankedResponse<KalshiMarket>>(`/kalshi/markets?${q}`);
+  },
+  getOne:      (id: string)           => request<KalshiMarket>(`/kalshi/markets/${id}`),
+  categories:  ()                     => request<string[]>('/kalshi/categories'),
+  overlays:    (symbols: string[])    => request<KalshiMarket[]>(`/kalshi/overlays?symbols=${symbols.join(',')}`),
+  health:      ()                     => request<{ ok: boolean; latency_ms: number | null; source: string }>('/kalshi/health'),
 };

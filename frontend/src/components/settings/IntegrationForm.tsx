@@ -30,23 +30,36 @@ export default function IntegrationForm({ integration: intg, onSave, onCancel }:
   const inputCls = 'w-full px-2.5 py-1.5 text-xs bg-zinc-800 border border-zinc-700 rounded text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-zinc-500 font-mono';
 
   return (
-    <form onSubmit={handleSave} className="space-y-2 pt-1 border-t border-zinc-800">
-      <div>
-        <label className="block text-xs text-zinc-500 mb-1">
-          API Key {intg.api_key_masked ? '(leave blank to keep existing)' : ''}
-        </label>
-        <input type="password" value={apiKey} onChange={e => setApiKey(e.target.value)}
-          placeholder={intg.api_key_masked ? intg.api_key_masked : 'sk-…'}
-          className={inputCls} />
-      </div>
-
-      {Object.entries(config).map(([key, val]) => (
-        <div key={key}>
-          <label className="block text-xs text-zinc-500 mb-1">{key}</label>
-          <input value={val} onChange={e => setConfig(prev => ({ ...prev, [key]: e.target.value }))}
-            className={inputCls} />
+    <form onSubmit={handleSave} className="space-y-2 pt-2 border-t border-zinc-800">
+      {/* Extra config fields (e.g. Key ID for Kalshi, Client ID for Reddit) */}
+      {intg.config_fields.map(field => (
+        <div key={field.key}>
+          <label className="block text-xs text-zinc-500 mb-1">
+            {field.label}
+            {field.hint && <span className="text-zinc-600 ml-1">— {field.hint}</span>}
+          </label>
+          <input
+            type={field.secret ? 'password' : 'text'}
+            value={config[field.key] ?? ''}
+            onChange={e => setConfig(prev => ({ ...prev, [field.key]: e.target.value }))}
+            className={inputCls}
+          />
         </div>
       ))}
+
+      {/* Primary credential */}
+      <div>
+        <label className="block text-xs text-zinc-500 mb-1">
+          {intg.api_key_label} {intg.api_key_masked ? '(leave blank to keep existing)' : ''}
+        </label>
+        <input
+          type="password"
+          value={apiKey}
+          onChange={e => setApiKey(e.target.value)}
+          placeholder={intg.api_key_masked ? intg.api_key_masked : ''}
+          className={inputCls}
+        />
+      </div>
 
       {error && <p className="text-xs text-red-400">{error}</p>}
 

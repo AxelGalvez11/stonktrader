@@ -8,7 +8,21 @@
       "Bash(npm install:*)",
       "Bash(npx tsc:*)",
       "Bash(curl -s http://localhost:3001 -o /dev/null -w \"%{http_code}\")",
-      "Bash(curl -s http://localhost:3001/diagnostics -o /dev/null -w \" %{http_code}\")"
+      "Bash(curl -s http://localhost:3001/diagnostics -o /dev/null -w \" %{http_code}\")",
+      "Bash(curl -s http://localhost:8000/stocks/rankings)",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(list\\(d.keys\\(\\)\\)\\)\")",
+      "Bash(source .venv/bin/activate)",
+      "Bash(pip install:*)",
+      "Bash(source .venv/bin/activate curl -s http://localhost:8000/kalshi/health)",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(''''overlays:'''', [m[''''ticker''''] for m in d]\\)\" curl -s \"http://localhost:8000/integrations\")",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(''''integrations:'''', [i[''''name''''] for i in d]\\)\")",
+      "Bash(curl -s http://localhost:8000/polymarket/signals)",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(list\\(d[''''data''''][0].keys\\(\\)\\)\\)\")",
+      "Bash(source venv/bin/activate)",
+      "Bash(python -c \":*)",
+      "Bash(curl -s http://localhost:8000/integrations)",
+      "Bash(python3 -c \":*)",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(list\\(d[0].keys\\(\\)\\)\\)\")"
     ]
   }
 }

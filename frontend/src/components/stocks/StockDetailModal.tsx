@@ -8,6 +8,7 @@ import ConfidenceDot from '@/components/ui/ConfidenceDot';
 import ReasonTags from '@/components/ui/ReasonTags';
 import WarningPills from '@/components/ui/WarningPills';
 import { formatPct, formatNumber, formatMarketCap, pctColor, probLabel, cn } from '@/lib/utils';
+import KalshiOverlay from '@/components/kalshi/KalshiOverlay';
 
 interface Props { stock: StockRanking; onClose: () => void; onWatchlist?: (s: string, t: 'stock') => void }
 
@@ -95,6 +96,10 @@ export default function StockDetailModal({ stock: s, onClose, onWatchlist }: Pro
               <WarningPills warnings={s.warnings} />
             </div>
           )}
+
+          <div className="bg-zinc-950/60 rounded-lg p-4 border border-zinc-800">
+            <KalshiOverlay symbols={[s.symbol]} />
+          </div>
         </div>
       </div>
 

@@ -14,11 +14,45 @@ class Settings(BaseSettings):
 
     database_url: str = "sqlite:///./market_radar.db"
 
-    # Optional API keys — not required in demo mode
+    # ── Stocks ───────────────────────────────────────────────────────────────
+    # Priority: FMP → Alpha Vantage → Twelve Data → demo
+    fmp_enabled: bool = False
+    fmp_api_key: str = ""
+
+    alpha_vantage_enabled: bool = False
     alpha_vantage_key: str = ""
+
+    twelve_data_enabled: bool = False
+    twelve_data_key: str = ""
+
+    # ── Crypto ───────────────────────────────────────────────────────────────
+    # Priority: CoinGecko → demo
+    coingecko_enabled: bool = False
     coingecko_api_key: str = ""
+
+    # ── Prediction Markets ───────────────────────────────────────────────────
+    # Priority: Polymarket → Kalshi → demo
+    polymarket_enabled: bool = False
     polymarket_api_key: str = ""
+
+    kalshi_enabled: bool = False
+    kalshi_env: str = "demo"              # "demo" | "production"
+    kalshi_base_url: str = ""             # override; empty = auto from kalshi_env
+    kalshi_api_key_id: str = ""           # key ID (not secret)
+    kalshi_private_key_pem: str = ""      # PEM string (newlines as \n in .env)
+    kalshi_private_key_path: str = ""     # path to PEM file (alternative to PEM string)
+    kalshi_timeout_seconds: float = 10.0
+
+    # ── News ─────────────────────────────────────────────────────────────────
+    # Priority: NewsAPI → demo
+    newsapi_enabled: bool = False
+    newsapi_key: str = ""
+
+    # ── Social (deferred — not yet integrated) ────────────────────────────────
+    twitter_enabled: bool = False
     twitter_bearer_token: str = ""
+
+    reddit_enabled: bool = False
     reddit_client_id: str = ""
     reddit_client_secret: str = ""
 
