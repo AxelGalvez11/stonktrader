@@ -6,7 +6,9 @@
       "Bash(python3 -m venv .venv)",
       "Bash(.venv/bin/python3 -c \"\nimport sys; sys.path.insert\\(0, '.'\\)\nfrom app.main import app\nfrom fastapi.testclient import TestClient\nclient = TestClient\\(app\\)\nr = client.get\\('/health'\\)\nprint\\('health:', r.json\\(\\)\\)\nr2 = client.get\\('/stocks/rankings?limit=3'\\)\ndata = r2.json\\(\\)\nprint\\('top 3 stocks:', [s['symbol'] for s in data['data']]\\)\nr3 = client.get\\('/memecoins/rankings?limit=3'\\)\nprint\\('top 3 coins:', [c['symbol'] for c in r3.json\\(\\)['data']]\\)\nr4 = client.get\\('/polymarket/signals?limit=3'\\)\nprint\\('polymarket signals:', len\\(r4.json\\(\\)['data']\\)\\)\nprint\\('All API routes OK'\\)\n\")",
       "Bash(npm install:*)",
-      "Bash(npx tsc:*)"
+      "Bash(npx tsc:*)",
+      "Bash(curl -s http://localhost:3001 -o /dev/null -w \"%{http_code}\")",
+      "Bash(curl -s http://localhost:3001/diagnostics -o /dev/null -w \" %{http_code}\")"
     ]
   }
 }
