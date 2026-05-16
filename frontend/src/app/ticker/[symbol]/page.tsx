@@ -26,6 +26,10 @@ export default function TickerPage({ params }: { params: { symbol: string } }) {
   const [trialLoading, setTrialLoading] = useState(false);
   const [trials, setTrials] = useState<any[]>([]);
   const [trialMsg, setTrialMsg] = useState('');
+  const [pubmedQuery, setPubmedQuery] = useState('');
+  const [pubmedLoading, setPubmedLoading] = useState(false);
+  const [pubmed, setPubmed] = useState<any[]>([]);
+  const [pubmedMsg, setPubmedMsg] = useState('');
 
 
 
@@ -49,6 +53,17 @@ export default function TickerPage({ params }: { params: { symbol: string } }) {
   }
 
 
+
+
+  async function searchPubMed() {
+    setPubmedLoading(true); setPubmedMsg('');
+    const q = pubmedQuery || `${symbol} mechanism endpoint safety`;
+    const r = await fetch('/api/pubmed/ingest', { method: 'POST', body: JSON.stringify({ ticker: symbol, query: q, context: { drug: symbol }, limit: 10 }) });
+    const j = await r.json();
+    if (!r.ok) setPubmedMsg(j.error || 'PubMed ingestion failed. Set NCBI_TOOL and NCBI_EMAIL.');
+    else setPubmed(j.articles || []);
+    setPubmedLoading(false);
+  }
 
   async function fetchClinicalTrials() {
     setTrialLoading(true); setTrialMsg('');
@@ -134,6 +149,15 @@ export default function TickerPage({ params }: { params: { symbol: string } }) {
           <a className="text-blue-400 text-xs" href={`/thesis/new?ticker=${symbol}`}>Use in thesis</a>
         </div>
       })}
+    </div>
+
+
+    <div className="bg-zinc-900 border border-zinc-800 rounded p-4 space-y-2">
+      <h2 className="font-semibold">PubMed Literature</h2>
+      <div className="flex gap-2"><input className="bg-zinc-800 p-2 rounded flex-1" placeholder="Search PubMed query" value={pubmedQuery} onChange={e=>setPubmedQuery(e.target.value)} />
+      <button className="bg-blue-600 rounded px-3 py-2" onClick={searchPubMed} disabled={pubmedLoading}>{pubmedLoading ? 'Searching…' : 'Search PubMed'}</button></div>
+      {pubmedMsg && <div className="text-sm text-amber-300">{pubmedMsg}</div>}
+      {pubmed.length===0 ? <div className="text-sm text-zinc-400">No PubMed articles loaded.</div> : pubmed.map((a:any)=><div key={a.pmid} className="border-t border-zinc-800 py-2 text-sm"><div><b>PMID {a.pmid}</b> {a.title}</div><div className="text-zinc-400">{a.journal} {a.publication_date} relevance {a.relevance_score}</div><div className="text-zinc-400">{String(a.abstract||'').slice(0,180)}</div><a className="text-blue-400 text-xs" href={`/thesis/new?ticker=${symbol}`}>Use in thesis</a></div>)}
     </div>
 
     <div className="bg-zinc-900 border border-zinc-800 rounded p-4 space-y-3">

@@ -6,6 +6,7 @@ import { validateThesisJson } from '@/features/biotech/lib/thesisSchema';
 import { buildSourcesFromNotes, findMissingFields, generateDraftFromNotes, prefillFromClinicalTrial, thesisQualityGates } from '@/features/biotech/lib/thesisBuilder.js';
 import ThesisPreview from '@/features/biotech/components/ThesisPreview';
 import ClinicalTrialSourceCard from '@/features/biotech/components/ClinicalTrialSourceCard';
+import PubMedSourceCard from '@/features/biotech/components/PubMedSourceCard';
 
 export default function NewThesisPage() {
   const params = useSearchParams();
@@ -14,20 +15,23 @@ export default function NewThesisPage() {
   const [notes, setNotes] = useState<any[]>([]);
   const [secSources, setSecSources] = useState<any[]>([]);
   const [trialSources, setTrialSources] = useState<any[]>([]);
+  const [pubmedSources, setPubmedSources] = useState<any[]>([]);
   const [selected, setSelected] = useState<string[]>(noteId ? [noteId] : []);
   const [thesis, setThesis] = useState<any>({ ...mockThesis, ticker: tickerParam || mockThesis.ticker });
   const [msg, setMsg] = useState('');
 
   useEffect(() => {
     async function load() {
-      const [n, s, t] = await Promise.all([
+      const [n, s, t, p] = await Promise.all([
         fetch(`/api/research-notes${tickerParam ? `?ticker=${tickerParam}` : ''}`),
         tickerParam ? fetch(`/api/sec/filings?ticker=${tickerParam}`) : Promise.resolve(new Response(JSON.stringify({ filings: [] }))),
         tickerParam ? fetch(`/api/clinical-trials/search?ticker=${tickerParam}`) : Promise.resolve(new Response(JSON.stringify({ trials: [] }))),
+        tickerParam ? fetch(`/api/pubmed/ingest`, { method: 'POST', body: JSON.stringify({ ticker: tickerParam, query: `${tickerParam} mechanism endpoint safety`, context: { drug: tickerParam }, limit: 10 }) }) : Promise.resolve(new Response(JSON.stringify({ articles: [] }))),
       ]);
       if (n.ok) setNotes(await n.json());
       if (s.ok) setSecSources((await s.json()).filings || []);
       if (t.ok) setTrialSources((await t.json()).trials || []);
+      if (p.ok) setPubmedSources((await p.json()).articles || []);
     }
     load();
   }, [tickerParam]);
@@ -36,8 +40,9 @@ export default function NewThesisPage() {
     const a = notes.map((n:any)=>({ id:n.id, source_type:n.source_type||'manual', source_url:n.source_url||'missing', title:n.title||'note', raw_text:n.raw_text||'' }));
     const b = secSources.map((s:any)=>({ id:`sec:${s.accessionNumber}`, source_type:'sec', source_url:`https://www.sec.gov/Archives/edgar/data/${Number(s.cik||0)}/${String(s.accessionNumber||'').replace(/-/g,'')}/${s.primaryDocument||''}`, title:`${s.filingType} ${s.filingDate}`, raw_text:'' }));
     const c = trialSources.map((t:any)=>({ id:`ct:${t.nct_id}`, source_type:'clinical_trials', source_url:t.source_url, title:t.brief_title, trial:t, raw_text:'' }));
-    return [...a,...b,...c];
-  }, [notes, secSources, trialSources]);
+    const d = pubmedSources.map((p:any)=>({ id:`pm:${p.pmid}`, source_type:'pubmed', source_url:p.source_url, title:p.title, pubmed:p, raw_text:p.abstract||'' }));
+    return [...a,...b,...c,...d];
+  }, [notes, secSources, trialSources, pubmedSources]);
 
   const selectedSources = useMemo(() => sourceCandidates.filter(s => selected.includes(s.id)), [sourceCandidates, selected]);
   const missing = useMemo(() => findMissingFields(thesis), [thesis]);
@@ -47,6 +52,16 @@ export default function NewThesisPage() {
     const d = generateDraftFromNotes({ ticker: thesis.ticker, company: thesis.company, notes: selectedSources });
     const trial = (selectedSources.find((s:any)=>s.source_type==='clinical_trials') as any)?.trial;
     if (trial) Object.assign(d, prefillFromClinicalTrial(d, trial));
+    const pm = (selectedSources.find((s:any)=>s.source_type==='pubmed') as any)?.pubmed;
+    if (pm) {
+      d.science_summary = `Fact: ${pm.title || 'missing'}. Interpretation: public evidence suggests uncertainty.`;
+      const sig = pm.scientific_signals || {};
+      d.mechanism = d.mechanism === 'missing' ? ((sig.mechanism_support||[]).slice(0,2).join(', ') || 'missing') : d.mechanism;
+      if ((sig.endpoint_relevance||[]).length) d.primary_endpoint_analysis = `${d.primary_endpoint_analysis} | literature: ${(sig.endpoint_relevance||[]).slice(0,2).join(', ')}`;
+      if ((sig.safety_signals||[]).length) d.safety_analysis = `Potential safety signals: ${(sig.safety_signals||[]).slice(0,3).join(', ')}`;
+      if ((sig.competitor_context||[]).length) d.competitor_landscape = `Literature context: ${(sig.competitor_context||[]).slice(0,2).join(', ')}`;
+      if ((sig.prior_target_failures||[]).length && (sig.prior_target_successes||[]).length) d.warnings = Array.from(new Set([...(d.warnings||[]), 'conflicting evidence']));
+    }
     setThesis(d);
   }
 
@@ -66,6 +81,8 @@ export default function NewThesisPage() {
       <h2 className="font-semibold">Select sources (manual, SEC, Clinical Trials)</h2>
       {sourceCandidates.map((s:any)=> s.source_type==='clinical_trials' ? (
         <ClinicalTrialSourceCard key={s.id} trial={s.trial} selected={selected.includes(s.id)} onToggle={()=>toggle(s.id)} />
+      ) : s.source_type==='pubmed' ? (
+        <PubMedSourceCard key={s.id} article={s.pubmed} selected={selected.includes(s.id)} onToggle={()=>toggle(s.id)} />
       ) : (
         <label key={s.id} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={selected.includes(s.id)} onChange={()=>toggle(s.id)} /> {s.title} <span className="text-zinc-500">({s.source_type})</span></label>
       ))}
