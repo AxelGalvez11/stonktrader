@@ -18,6 +18,10 @@ export default function TickerPage({ params }: { params: { symbol: string } }) {
   const [secLoading, setSecLoading] = useState(false);
   const [secData, setSecData] = useState<any[]>([]);
   const [secMsg, setSecMsg] = useState('');
+  const [trialLoading, setTrialLoading] = useState(false);
+  const [trials, setTrials] = useState<any[]>([]);
+  const [trialMsg, setTrialMsg] = useState('');
+
 
 
   async function load() {
@@ -39,6 +43,16 @@ export default function TickerPage({ params }: { params: { symbol: string } }) {
     setStructured(await r.json());
   }
 
+
+
+  async function fetchClinicalTrials() {
+    setTrialLoading(true); setTrialMsg('');
+    const r = await fetch('/api/clinical-trials/ingest', { method: 'POST', body: JSON.stringify({ ticker: symbol, companyName: symbol, limit: 10 }) });
+    const j = await r.json();
+    if (!r.ok) setTrialMsg(j.error || 'ClinicalTrials ingestion failed.');
+    else setTrials(j.trials || []);
+    setTrialLoading(false);
+  }
 
   async function fetchSecFilings() {
     setSecLoading(true);
@@ -89,6 +103,26 @@ export default function TickerPage({ params }: { params: { symbol: string } }) {
           <a className="text-blue-400 text-xs" href={`/thesis/new?ticker=${symbol}`}>Use in thesis</a>
         </div>
       ))}
+    </div>
+
+
+    <div className="bg-zinc-900 border border-zinc-800 rounded p-4 space-y-2">
+      <h2 className="font-semibold">Clinical Trials</h2>
+      <button className="bg-blue-600 rounded px-3 py-2" onClick={fetchClinicalTrials} disabled={trialLoading}>{trialLoading ? 'Fetching…' : 'Fetch clinical trials'}</button>
+      {trialMsg && <div className="text-sm text-amber-300">{trialMsg}</div>}
+      {trials.length === 0 ? <div className="text-sm text-zinc-400">No trials fetched yet.</div> : trials.map((x:any) => {
+        const t = x.trial;
+        return <div key={t.nct_id} className="border-t border-zinc-800 py-2 text-sm"> 
+          <div><b>{t.nct_id}</b> • {t.phase} • {t.status}</div>
+          <div>{t.brief_title}</div>
+          <div className="text-zinc-400">Condition: {(t.conditions||[])[0] || 'missing'} | Intervention: {(t.interventions||[])[0] || 'missing'} | Enrollment: {t.enrollment}</div>
+          <div className="text-zinc-400">Primary endpoint: {(t.primary_endpoints||[])[0] || 'missing'}</div>
+          <div className="text-zinc-400">Primary completion: {t.primary_completion_date}</div>
+          <div className="text-zinc-400">Potential catalyst: {x.potentialCatalyst.title} ({x.potentialCatalyst.expected_date})</div>
+          <a className="text-blue-400 text-xs mr-3" href={t.source_url} target="_blank">Source</a>
+          <a className="text-blue-400 text-xs" href={`/thesis/new?ticker=${symbol}`}>Use in thesis</a>
+        </div>
+      })}
     </div>
 
     <div className="bg-zinc-900 border border-zinc-800 rounded p-4 space-y-3">
