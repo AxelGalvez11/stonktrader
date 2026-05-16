@@ -50,6 +50,9 @@ export default function TickerPage({ params }: { params: { symbol: string } }) {
   const [modelType, setModelType] = useState('');
   const [assumptions, setAssumptions] = useState<any>({ revenue_growth_rate:0.1, free_cash_flow_margin:0.2, discount_rate:0.12, terminal_growth_rate:0.02, dilution_percent:0.15 });
   const [modelMsg, setModelMsg] = useState('');
+  const [packetLoading, setPacketLoading] = useState(false);
+  const [packetResult, setPacketResult] = useState<any>(null);
+  const [packetOptions, setPacketOptions] = useState<any>({ includeSec:true, includeMarketData:true, includeFundamentals:true, includeFinancialModel:true, includeClinicalTrials:true, includePubMed:true, includeFda:true, createDraftThesis:false, runSynthesis:true });
 
 
   async function load() {
@@ -167,6 +170,16 @@ export default function TickerPage({ params }: { params: { symbol: string } }) {
     else { setModelMsg('Financial valuation model updated (paper-trading analysis only).'); await load(); }
   }
 
+
+  async function runResearchPacket(){
+    setPacketLoading(true); setPacketResult(null);
+    const r = await fetch('/api/research-packet', { method:'POST', body: JSON.stringify({ ticker:symbol, options:packetOptions }) });
+    const j = await r.json();
+    setPacketResult(j);
+    setPacketLoading(false);
+    if(r.ok) await load();
+  }
+
   async function saveNote(e: React.FormEvent) {
     e.preventDefault();
     await fetch('/api/research-notes', { method: 'POST', body: JSON.stringify({ ticker: symbol, title: noteTitle || `Note ${new Date().toISOString()}`, raw_text: noteText, source_url: sourceUrl || null, source_type: sourceType, catalyst_id: attachCatalyst || null, user_id: '00000000-0000-0000-0000-000000000000' }) });
@@ -195,6 +208,23 @@ export default function TickerPage({ params }: { params: { symbol: string } }) {
         <div>Bull/Base/Bear: {fundamentals[0].bull_case} | {fundamentals[0].base_case} | {fundamentals[0].bear_case}</div>
         <div>Missing data: {(fundamentals[0].missing_data||[]).join(', ') || 'none'}</div>
         <a className='text-blue-400 text-xs' href={`/thesis/new?ticker=${symbol}`}>Use in thesis</a>
+      </div>}
+    </div>
+
+
+    <div className='bg-zinc-900 border border-zinc-800 rounded p-4 space-y-2'>
+      <h2 className='font-semibold'>Research Packet</h2>
+      <div className='text-xs text-zinc-400'>One-click public-source research packet for paper-trading analysis only. Not investment advice and not predictive.</div>
+      <div className='grid grid-cols-3 gap-2 text-xs'>
+        {Object.keys(packetOptions).map((k)=> <label key={k} className='flex items-center gap-1'><input type='checkbox' checked={!!packetOptions[k]} onChange={e=>setPacketOptions({...packetOptions,[k]:e.target.checked})} /> {k}</label>)}
+      </div>
+      <button className='bg-blue-600 rounded px-3 py-2' onClick={runResearchPacket} disabled={packetLoading}>{packetLoading?'Running...':'Research this company'}</button>
+      {packetResult && <div className='text-sm space-y-1'>
+        <div>Status: <b>{packetResult.status}</b></div>
+        <div>Missing: {(packetResult.missing_data||[]).join(', ') || 'none'}</div>
+        <div>Warnings: {(packetResult.warnings||[]).join(' | ') || 'none'}</div>
+        <div>Next actions: {(packetResult.research_packet_summary?.suggested_follow_up_questions||[]).join(' | ')}</div>
+        <div className='text-xs'>Steps: {(packetResult.steps||[]).map((s:any)=>`${s.step}:${s.status}`).join(' | ')}</div>
       </div>}
     </div>
 
