@@ -7,6 +7,7 @@ import { buildSourcesFromNotes, findMissingFields, generateDraftFromNotes, prefi
 import ThesisPreview from '@/features/biotech/components/ThesisPreview';
 import ClinicalTrialSourceCard from '@/features/biotech/components/ClinicalTrialSourceCard';
 import PubMedSourceCard from '@/features/biotech/components/PubMedSourceCard';
+import FdaSourceCard from '@/features/biotech/components/FdaSourceCard';
 
 export default function NewThesisPage() {
   const params = useSearchParams();
@@ -16,22 +17,25 @@ export default function NewThesisPage() {
   const [secSources, setSecSources] = useState<any[]>([]);
   const [trialSources, setTrialSources] = useState<any[]>([]);
   const [pubmedSources, setPubmedSources] = useState<any[]>([]);
+  const [fdaSources, setFdaSources] = useState<any[]>([]);
   const [selected, setSelected] = useState<string[]>(noteId ? [noteId] : []);
   const [thesis, setThesis] = useState<any>({ ...mockThesis, ticker: tickerParam || mockThesis.ticker });
   const [msg, setMsg] = useState('');
 
   useEffect(() => {
     async function load() {
-      const [n, s, t, p] = await Promise.all([
+      const [n, s, t, p, f] = await Promise.all([
         fetch(`/api/research-notes${tickerParam ? `?ticker=${tickerParam}` : ''}`),
         tickerParam ? fetch(`/api/sec/filings?ticker=${tickerParam}`) : Promise.resolve(new Response(JSON.stringify({ filings: [] }))),
         tickerParam ? fetch(`/api/clinical-trials/search?ticker=${tickerParam}`) : Promise.resolve(new Response(JSON.stringify({ trials: [] }))),
         tickerParam ? fetch(`/api/pubmed/ingest`, { method: 'POST', body: JSON.stringify({ ticker: tickerParam, query: `${tickerParam} mechanism endpoint safety`, context: { drug: tickerParam }, limit: 10 }) }) : Promise.resolve(new Response(JSON.stringify({ articles: [] }))),
+        tickerParam ? fetch(`/api/fda/ingest`, { method: 'POST', body: JSON.stringify({ ticker: tickerParam, query: `${tickerParam} safety warning label`, context: { drug: tickerParam, company: tickerParam }, limit: 10 }) }) : Promise.resolve(new Response(JSON.stringify({ records: [] }))),
       ]);
       if (n.ok) setNotes(await n.json());
       if (s.ok) setSecSources((await s.json()).filings || []);
       if (t.ok) setTrialSources((await t.json()).trials || []);
       if (p.ok) setPubmedSources((await p.json()).articles || []);
+      if (f.ok) setFdaSources((await f.json()).records || []);
     }
     load();
   }, [tickerParam]);
@@ -41,8 +45,9 @@ export default function NewThesisPage() {
     const b = secSources.map((s:any)=>({ id:`sec:${s.accessionNumber}`, source_type:'sec', source_url:`https://www.sec.gov/Archives/edgar/data/${Number(s.cik||0)}/${String(s.accessionNumber||'').replace(/-/g,'')}/${s.primaryDocument||''}`, title:`${s.filingType} ${s.filingDate}`, raw_text:'' }));
     const c = trialSources.map((t:any)=>({ id:`ct:${t.nct_id}`, source_type:'clinical_trials', source_url:t.source_url, title:t.brief_title, trial:t, raw_text:'' }));
     const d = pubmedSources.map((p:any)=>({ id:`pm:${p.pmid}`, source_type:'pubmed', source_url:p.source_url, title:p.title, pubmed:p, raw_text:p.abstract||'' }));
-    return [...a,...b,...c,...d];
-  }, [notes, secSources, trialSources, pubmedSources]);
+    const e = fdaSources.map((r:any)=>({ id:`fda:${r.fda_source_id||r.title}`, source_type:'fda', source_url:r.source_url, title:r.title, fda:r, raw_text:JSON.stringify(r.label_sections||{}) }));
+    return [...a,...b,...c,...d,...e];
+  }, [notes, secSources, trialSources, pubmedSources, fdaSources]);
 
   const selectedSources = useMemo(() => sourceCandidates.filter(s => selected.includes(s.id)), [sourceCandidates, selected]);
   const missing = useMemo(() => findMissingFields(thesis), [thesis]);
@@ -62,6 +67,16 @@ export default function NewThesisPage() {
       if ((sig.competitor_context||[]).length) d.competitor_landscape = `Literature context: ${(sig.competitor_context||[]).slice(0,2).join(', ')}`;
       if ((sig.prior_target_failures||[]).length && (sig.prior_target_successes||[]).length) d.warnings = Array.from(new Set([...(d.warnings||[]), 'conflicting evidence']));
     }
+
+    const fda = (selectedSources.find((s:any)=>s.source_type==='fda') as any)?.fda;
+    if (fda) {
+      d.regulatory_risk = `Public FDA source regulatory context: ${(fda.regulatory_signals?.safety_warnings||[]).slice(0,2).join(', ') || 'missing'}`;
+      if ((fda.regulatory_signals?.safety_warnings||[]).length || (fda.regulatory_signals?.boxed_warning||[]).length) d.safety_analysis = `FDA safety context: ${[...(fda.regulatory_signals?.safety_warnings||[]), ...(fda.regulatory_signals?.boxed_warning||[])].slice(0,3).join(', ')}`;
+      if (fda.indication && fda.indication !== 'missing') d.standard_of_care = `Comparator/class evidence from public FDA label: ${String(fda.indication).slice(0,180)}`;
+      d.warnings = Array.from(new Set([...(d.warnings||[]), 'public FDA source', 'regulatory context', 'does not imply approval certainty']));
+      if ((d.warnings||[]).includes('conflicting evidence')) d.warnings = Array.from(new Set([...(d.warnings||[]), 'regulatory/scientific tension']));
+    }
+
     setThesis(d);
   }
 
@@ -83,6 +98,8 @@ export default function NewThesisPage() {
         <ClinicalTrialSourceCard key={s.id} trial={s.trial} selected={selected.includes(s.id)} onToggle={()=>toggle(s.id)} />
       ) : s.source_type==='pubmed' ? (
         <PubMedSourceCard key={s.id} article={s.pubmed} selected={selected.includes(s.id)} onToggle={()=>toggle(s.id)} />
+      ) : s.source_type==='fda' ? (
+        <FdaSourceCard key={s.id} rec={s.fda} selected={selected.includes(s.id)} onToggle={()=>toggle(s.id)} />
       ) : (
         <label key={s.id} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={selected.includes(s.id)} onChange={()=>toggle(s.id)} /> {s.title} <span className="text-zinc-500">({s.source_type})</span></label>
       ))}
