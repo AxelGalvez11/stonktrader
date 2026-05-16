@@ -6,13 +6,15 @@ import { MISTAKE_CATEGORIES } from '@/features/biotech/lib/reviewAnalyzer';
 export default function ReviewPage() {
   const [trades, setTrades] = useState<any[]>([]);
   const [reviews, setReviews] = useState<any[]>([]);
+  const [catalysts, setCatalysts] = useState<any[]>([]);
   const [form, setForm] = useState<any>({ paper_trade_id: '', catalyst_outcome: '', actual_event_date: '', stock_reaction_percent: 'not available', exit_price: '', result_percent: '', result_dollars: '', scientific_notes: '', financial_notes: '', market_reaction_notes: '', user_reflection: '', mistake_category: '', lesson_learned: '', future_rule: '' });
   const [msg, setMsg] = useState('');
 
   async function load() {
-    const [t, r] = await Promise.all([fetch('/api/paper-trades'), fetch('/api/trade-reviews')]);
+    const [t, r, c] = await Promise.all([fetch('/api/paper-trades'), fetch('/api/trade-reviews'), fetch('/api/catalysts')]);
     if (t.ok) setTrades(await t.json());
     if (r.ok) setReviews(await r.json());
+    if (c.ok) setCatalysts(await c.json());
   }
   useEffect(() => { load(); }, []);
 
@@ -52,7 +54,7 @@ export default function ReviewPage() {
     </div>
 
     <form onSubmit={submit} className="bg-zinc-900 border border-zinc-800 rounded p-4 grid grid-cols-2 gap-2">
-      <select className="bg-zinc-800 p-2 rounded" value={form.paper_trade_id} onChange={e => { const id=e.target.value; const t=trades.find((x:any)=>String(x.id)===String(id)); setForm({ ...form, paper_trade_id: id, actual_event_date: t?.actual_exit_date || form.actual_event_date, catalyst_outcome: t?.catalyst_outcome || form.catalyst_outcome }); }} required>
+      <select className="bg-zinc-800 p-2 rounded" value={form.paper_trade_id} onChange={e => { const id=e.target.value; const t=trades.find((x:any)=>String(x.id)===String(id)); const cat=catalysts.find((x:any)=>String(x.id)===String(t?.catalyst_id)); setForm({ ...form, paper_trade_id: id, actual_event_date: t?.actual_exit_date || cat?.expected_date || form.actual_event_date, catalyst_outcome: cat?.outcome || t?.notes || form.catalyst_outcome }); }} required>
         <option value="">Select paper trade</option>
         {trades.map(t => <option key={t.id} value={t.id}>{t.ticker} #{t.id} ({t.status})</option>)}
       </select>
