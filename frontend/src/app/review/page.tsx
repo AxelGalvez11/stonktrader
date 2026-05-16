@@ -9,12 +9,14 @@ export default function ReviewPage() {
   const [catalysts, setCatalysts] = useState<any[]>([]);
   const [form, setForm] = useState<any>({ paper_trade_id: '', catalyst_outcome: '', actual_event_date: '', stock_reaction_percent: 'not available', exit_price: '', result_percent: '', result_dollars: '', scientific_notes: '', financial_notes: '', market_reaction_notes: '', user_reflection: '', mistake_category: '', lesson_learned: '', future_rule: '' });
   const [msg, setMsg] = useState('');
+  const [alertWarnings, setAlertWarnings] = useState<any[]>([]);
 
   async function load() {
-    const [t, r, c] = await Promise.all([fetch('/api/paper-trades'), fetch('/api/trade-reviews'), fetch('/api/catalysts')]);
+    const [t, r, c, a] = await Promise.all([fetch('/api/paper-trades'), fetch('/api/trade-reviews'), fetch('/api/catalysts'), fetch('/api/catalyst-alerts')]);
     if (t.ok) setTrades(await t.json());
     if (r.ok) setReviews(await r.json());
     if (c.ok) setCatalysts(await c.json());
+    if (a.ok) { const aj = await a.json(); setAlertWarnings((aj.warnings || []).filter((w:any)=>w.type==='missing_data')); }
   }
   useEffect(() => { load(); }, []);
 
@@ -45,6 +47,8 @@ export default function ReviewPage() {
   return <div className="p-6 space-y-4">
     <h1 className="text-2xl font-semibold">Post-Event Review</h1>
     <p className="text-sm text-zinc-400">Educational paper-trading review only. Public evidence suggests uncertainty; this does not predict future trades.</p>
+
+    {alertWarnings.length>0 && <div className="bg-amber-950/30 border border-amber-800 rounded p-3 text-xs">Missing data warnings: {alertWarnings.slice(0,5).map((w:any,i:number)=><span key={i} className="mr-3">{w.code}{w.ticker?`(${w.ticker})`:''}</span>)}</div>}
 
     <div className="grid grid-cols-4 gap-3 text-sm">
       <div className="bg-zinc-900 border border-zinc-800 rounded p-3">Open trades: {openTrades.length}</div>

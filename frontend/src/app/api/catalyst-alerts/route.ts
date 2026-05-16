@@ -41,6 +41,34 @@ export async function GET(req: NextRequest) {
       return acc;
     }, {});
 
+    const synthesisByThesis = (syntheses || []).reduce((acc: Record<string, any>, syn: any) => {
+      if (syn?.thesis_id !== null && syn?.thesis_id !== undefined) acc[String(syn.thesis_id)] = syn;
+      return acc;
+    }, {});
+    const synthesisByTicker = (syntheses || []).reduce((acc: Record<string, any>, syn: any) => {
+      const t = String(syn?.ticker || '').toUpperCase();
+      if (t && !acc[t]) acc[t] = syn;
+      return acc;
+    }, {});
+
+    const tradeByCatalyst = (paperTrades || []).reduce((acc: Record<string, any[]>, t: any) => {
+      const k = String(t?.catalyst_id || '');
+      if (!k) return acc;
+      acc[k] = [...(acc[k] || []), t];
+      return acc;
+    }, {});
+
+    const warnings: any[] = [];
+    for (const c of catalysts || []) {
+      const tickerKey = String(c?.ticker || '').toUpperCase();
+      const hasSynthesis = !!(synthesisByThesis[String(c?.thesis_id)] || synthesisByTicker[tickerKey]);
+      if (!hasSynthesis) warnings.push({ type: 'missing_data', code: 'missing_synthesis_link', catalyst_id: c?.id, ticker: tickerKey });
+      if (!c?.thesis_id) warnings.push({ type: 'missing_data', code: 'missing_thesis_link', catalyst_id: c?.id, ticker: tickerKey });
+      if (!tradeByCatalyst[String(c?.id)]?.length) warnings.push({ type: 'missing_data', code: 'missing_paper_trade_link', catalyst_id: c?.id, ticker: tickerKey });
+      if (!toTickerMap(secFilings)[tickerKey]) warnings.push({ type: 'missing_data', code: 'missing_sec_link', catalyst_id: c?.id, ticker: tickerKey });
+      if (!toTickerMap(clinicalTrials)[tickerKey]) warnings.push({ type: 'missing_data', code: 'missing_clinical_trials_link', catalyst_id: c?.id, ticker: tickerKey });
+    }
+
     const alerts = generateCatalystAlerts({
       catalysts,
       paperTrades,
@@ -51,7 +79,7 @@ export async function GET(req: NextRequest) {
       secFlagsByTicker,
     });
 
-    return NextResponse.json({ alerts });
+    return NextResponse.json({ alerts, warnings });
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 500 });
   }
