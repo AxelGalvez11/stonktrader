@@ -8,6 +8,7 @@ import ThesisPreview from '@/features/biotech/components/ThesisPreview';
 import ClinicalTrialSourceCard from '@/features/biotech/components/ClinicalTrialSourceCard';
 import PubMedSourceCard from '@/features/biotech/components/PubMedSourceCard';
 import FdaSourceCard from '@/features/biotech/components/FdaSourceCard';
+import SynthesisPanel from '@/features/biotech/components/SynthesisPanel';
 
 export default function NewThesisPage() {
   const params = useSearchParams();
@@ -21,6 +22,8 @@ export default function NewThesisPage() {
   const [selected, setSelected] = useState<string[]>(noteId ? [noteId] : []);
   const [thesis, setThesis] = useState<any>({ ...mockThesis, ticker: tickerParam || mockThesis.ticker });
   const [msg, setMsg] = useState('');
+  const [syn, setSyn] = useState<any>(null);
+  const [ackWeak, setAckWeak] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -80,11 +83,23 @@ export default function NewThesisPage() {
     setThesis(d);
   }
 
+
+  async function analyzeThesisQuality() {
+    const draft = { ...thesis, source_summary: buildSourcesFromNotes(selectedSources) };
+    const marketData = tickerParam ? await (await fetch('/api/market/refresh', { method: 'POST', body: JSON.stringify({ ticker: tickerParam, range: '6mo' }) })).json() : null;
+    const catalyst = null;
+    const r = await fetch('/api/thesis-synthesis', { method: 'POST', body: JSON.stringify({ ticker: draft.ticker, thesis: draft, selectedSources, marketData, catalyst }) });
+    const j = await r.json();
+    if (!r.ok) return setMsg(j.error || 'Synthesis failed');
+    setSyn(j.synthesis);
+  }
+
   async function saveGuided() {
     setMsg('');
     const draft = { ...thesis, source_summary: buildSourcesFromNotes(selectedSources) };
     const gate = thesisQualityGates(draft); if (gate.length) return setMsg(gate.join(' | '));
     const valid = validateThesisJson(draft); if (!valid.ok) return setMsg((valid.errors||['Invalid thesis']).join(' | '));
+    if (syn?.paper_trade_readiness==='not_ready' && !ackWeak) { setMsg('Thesis marked not_ready. Acknowledge educational override to save.'); return; }
     const r = await fetch('/api/theses', { method: 'POST', body: JSON.stringify({ ticker: draft.ticker, thesis_json: draft, source_ids: draft.source_summary.map((s: any) => s.sourceId) }) });
     setMsg(r.ok ? 'Thesis saved.' : `Save failed: ${(await r.json()).error}`);
   }
@@ -116,7 +131,9 @@ export default function NewThesisPage() {
     </div>
 
     <ThesisPreview thesis={{ ...thesis, source_summary: buildSourcesFromNotes(selectedSources) }} missing={missing} />
-    <button className="bg-blue-600 rounded px-3 py-2" onClick={saveGuided}>Save guided thesis</button>
+    <div className="flex gap-2"><button className="bg-zinc-700 rounded px-3 py-2" onClick={analyzeThesisQuality}>Analyze thesis quality</button><button className="bg-blue-600 rounded px-3 py-2" onClick={saveGuided}>Save guided thesis</button></div>
+    <label className="text-xs text-zinc-400 flex items-center gap-2"><input type="checkbox" checked={ackWeak} onChange={e=>setAckWeak(e.target.checked)} /> Acknowledge educational override for weak/not_ready synthesis</label>
+    <SynthesisPanel s={syn} />
     {msg && <div className="text-sm text-amber-300">{msg}</div>}
   </div>;
 }
