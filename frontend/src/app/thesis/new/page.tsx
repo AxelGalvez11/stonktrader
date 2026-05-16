@@ -21,6 +21,7 @@ export default function NewThesisPage() {
   const [pubmedSources, setPubmedSources] = useState<any[]>([]);
   const [fdaSources, setFdaSources] = useState<any[]>([]);
   const [fundamentalSources, setFundamentalSources] = useState<any[]>([]);
+  const [financialModelSources, setFinancialModelSources] = useState<any[]>([]);
   const [selected, setSelected] = useState<string[]>(noteId ? [noteId] : []);
   const [thesis, setThesis] = useState<any>({ ...mockThesis, ticker: tickerParam || mockThesis.ticker });
   const [msg, setMsg] = useState('');
@@ -32,13 +33,14 @@ export default function NewThesisPage() {
 
   useEffect(() => {
     async function load() {
-      const [n, s, t, p, f, fr] = await Promise.all([
+      const [n, s, t, p, f, fr, fm] = await Promise.all([
         fetch(`/api/research-notes${tickerParam ? `?ticker=${tickerParam}` : ''}`),
         tickerParam ? fetch(`/api/sec/filings?ticker=${tickerParam}`) : Promise.resolve(new Response(JSON.stringify({ filings: [] }))),
         tickerParam ? fetch(`/api/clinical-trials/search?ticker=${tickerParam}`) : Promise.resolve(new Response(JSON.stringify({ trials: [] }))),
         tickerParam ? fetch(`/api/pubmed/ingest`, { method: 'POST', body: JSON.stringify({ ticker: tickerParam, query: `${tickerParam} mechanism endpoint safety`, context: { drug: tickerParam }, limit: 10 }) }) : Promise.resolve(new Response(JSON.stringify({ articles: [] }))),
         tickerParam ? fetch(`/api/fda/ingest`, { method: 'POST', body: JSON.stringify({ ticker: tickerParam, query: `${tickerParam} safety warning label`, context: { drug: tickerParam, company: tickerParam }, limit: 10 }) }) : Promise.resolve(new Response(JSON.stringify({ records: [] }))),
         tickerParam ? fetch(`/api/fundamentals?ticker=${tickerParam}`) : Promise.resolve(new Response(JSON.stringify([]))),
+        tickerParam ? fetch(`/api/financial-models?ticker=${tickerParam}`) : Promise.resolve(new Response(JSON.stringify([]))),
       ]);
       if (n.ok) setNotes(await n.json());
       if (s.ok) setSecSources((await s.json()).filings || []);
@@ -46,6 +48,7 @@ export default function NewThesisPage() {
       if (p.ok) setPubmedSources((await p.json()).articles || []);
       if (f.ok) setFdaSources((await f.json()).records || []);
       if (fr.ok) setFundamentalSources(await fr.json());
+      if (fm.ok) setFinancialModelSources(await fm.json());
     }
     load();
   }, [tickerParam]);
@@ -57,8 +60,9 @@ export default function NewThesisPage() {
     const d = pubmedSources.map((p:any)=>({ id:`pm:${p.pmid}`, source_type:'pubmed', source_url:p.source_url, title:p.title, pubmed:p, raw_text:p.abstract||'' }));
     const e = fdaSources.map((r:any)=>({ id:`fda:${r.fda_source_id||r.title}`, source_type:'fda', source_url:r.source_url, title:r.title, fda:r, raw_text:JSON.stringify(r.label_sections||{}) }));
     const f = fundamentalSources.map((r:any)=>({ id:`fund:${r.id||r.created_at}`, source_type:'fundamentals', source_url:'missing', title:`Fundamentals ${r.ticker}`, fundamentals:r, raw_text:JSON.stringify(r) }));
-    return [...a,...b,...c,...d,...e,...f];
-  }, [notes, secSources, trialSources, pubmedSources, fdaSources, fundamentalSources]);
+    const g = financialModelSources.map((r:any)=>({ id:`fm:${r.id||r.created_at}`, source_type:'financial_model', source_url:'missing', title:`Financial model ${r.model_type} ${r.ticker}`, financialModel:r, raw_text:JSON.stringify(r.model_output||{}) }));
+    return [...a,...b,...c,...d,...e,...f,...g];
+  }, [notes, secSources, trialSources, pubmedSources, fdaSources, fundamentalSources, financialModelSources]);
 
   const selectedSources = useMemo(() => sourceCandidates.filter(s => selected.includes(s.id)), [sourceCandidates, selected]);
   const missing = useMemo(() => findMissingFields(thesis), [thesis]);
@@ -105,6 +109,7 @@ export default function NewThesisPage() {
     }
 
     const fr = (selectedSources.find((s:any)=>s.source_type==='fundamentals') as any)?.fundamentals;
+    const fm = (selectedSources.find((s:any)=>s.source_type==='financial_model') as any)?.financialModel;
     if (fr) {
       d.financial_risk = `Fundamental research: overall ${fr.fundamental_quality?.overall_label || 'missing'}`;
       d.dilution_risk = fr.biotech_specific_metrics?.dilution_risk || d.dilution_risk;
@@ -112,6 +117,14 @@ export default function NewThesisPage() {
       d.market_expectation = `Observed public financial data context: P/S ${fr.valuation_metrics?.price_to_sales ?? 'missing'}`;
       d.base_case = fr.base_case || d.base_case;
       d.warnings = Array.from(new Set([...(d.warnings||[]), 'fundamental research is approximate where data is incomplete']));
+    }
+    if(fm){
+      d.market_expectation = `Valuation model (${fm.model_type}) upside/downside ${fm.model_output?.upside_downside_percent ?? 'missing'}%`;
+      d.financial_risk = `Valuation sensitivity: ${(fm.model_output?.warnings||[]).join('; ') || 'missing'}`;
+      d.base_case = fm.scenario_analysis?.base_case?.assumptions ? 'Base case from selected financial model assumptions.' : d.base_case;
+      d.bull_case = fm.scenario_analysis?.bull_case ? 'Bull case includes valuation model upside under optimistic assumptions.' : d.bull_case;
+      d.bear_case = fm.scenario_analysis?.bear_case ? 'Bear case includes dilution/delay/valuation compression scenario.' : d.bear_case;
+      d.warnings = Array.from(new Set([...(d.warnings||[]), 'Financial model output depends heavily on user assumptions.']));
     }
     setThesis(d);
   }

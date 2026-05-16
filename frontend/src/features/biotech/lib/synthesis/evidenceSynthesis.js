@@ -1,4 +1,5 @@
 function includesAny(text, terms){ const t=String(text||'').toLowerCase(); return terms.some(x=>t.includes(x)); }
+function labelWeakPubmed(pubmed){ return !pubmed.length || pubmed.some(p=>(p.scientific_signals?.missing_fields||[]).length>4); }
 
 export function detectEvidenceConflicts(inputs){
   const c=[];
@@ -15,6 +16,15 @@ export function detectEvidenceConflicts(inputs){
   if (Number(f0?.financial_snapshot?.estimated_runway_quarters||999) < 2 && includesAny(String(inputs.paperTradeDraft?.status||'open'),['open'])) c.push({severity:'major',msg:'Runway may be under 2 quarters while paper-trade readiness appears high.'});
   if ((f0?.biotech_specific_metrics?.dilution_risk||'').toLowerCase()==='high' && includesAny(thesis.financial_risk,['low'])) c.push({severity:'major',msg:'Financial risk may be understated versus dilution evidence.'});
 
+
+  const financialModels = (inputs.selectedSources||[]).filter(s=>s.source_type==='financial_model').map(s=>s.financialModel||{});
+  const fm0 = financialModels[0] || {};
+  if ((n=>typeof n==='number'&&n>20)(fm0?.model_output?.upside_downside_percent) && labelWeakPubmed(pubmed)) c.push({severity:'moderate',msg:'Valuation model implies upside while evidence quality remains weak.'});
+  if ((f0?.biotech_specific_metrics?.dilution_risk||'').toLowerCase()==='high' && (fm0?.model_output?.upside_downside_percent||0)>0) c.push({severity:'major',msg:'Attractive modeled value may conflict with high dilution risk.'});
+  if ((fm0?.model_output?.upside_downside_percent||0)>15 && f0?.fundamental_quality?.overall_label==='weak') c.push({severity:'moderate',msg:'DCF/model upside may conflict with declining or weak fundamentals.'});
+  if ((fm0?.model_output?.warnings||[]).some((w)=>String(w).toLowerCase().includes('sensitive'))) c.push({severity:'moderate',msg:'Valuation appears highly sensitive to assumptions.'});
+  if ((fm0?.model_output?.warnings||[]).some((w)=>String(w).toLowerCase().includes('peak sales'))) c.push({severity:'moderate',msg:'Valuation may depend on unrealistic peak-sales assumptions.'});
+  if ((fm0?.model_output?.enterprise_value||0) < (inputs.marketData?.quote?.market_cap||0) && (fm0?.model_type==='risk_adjusted_pipeline')) c.push({severity:'major',msg:'Current market cap may already exceed risk-adjusted pipeline value.'});
 
   if (pubmed.length && includesAny(thesis.bull_case,['strong','very','high conviction']) && pubmed.some(p=>(p.scientific_signals?.missing_fields||[]).length>4)) c.push({severity:'moderate',msg:'Bull case may overstate scientific support.'});
   if (trials.length && includesAny(thesis.catalyst,['confirmed','guaranteed','certain']) ) c.push({severity:'major',msg:'Trial completion date is not a guaranteed readout date.'});

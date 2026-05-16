@@ -46,11 +46,14 @@ export default function TickerPage({ params }: { params: { symbol: string } }) {
   const [theses, setTheses] = useState<any[]>([]);
   const [fundamentals, setFundamentals] = useState<any[]>([]);
   const [fundMsg, setFundMsg] = useState('');
-
+  const [financialModels, setFinancialModels] = useState<any[]>([]);
+  const [modelType, setModelType] = useState('');
+  const [assumptions, setAssumptions] = useState<any>({ revenue_growth_rate:0.1, free_cash_flow_margin:0.2, discount_rate:0.12, terminal_growth_rate:0.02, dilution_percent:0.15 });
+  const [modelMsg, setModelMsg] = useState('');
 
 
   async function load() {
-    const [c, n, w, p, r, syn, th, fr] = await Promise.all([fetch(`/api/catalysts?ticker=${symbol}`), fetch(`/api/research-notes?ticker=${symbol}`), fetch('/api/watchlist'), fetch('/api/paper-trades'), fetch('/api/trade-reviews'), fetch(`/api/thesis-synthesis?ticker=${symbol}`), fetch(`/api/theses?ticker=${symbol}`), fetch(`/api/fundamentals?ticker=${symbol}`)]);
+    const [c, n, w, p, r, syn, th, fr, fm] = await Promise.all([fetch(`/api/catalysts?ticker=${symbol}`), fetch(`/api/research-notes?ticker=${symbol}`), fetch('/api/watchlist'), fetch('/api/paper-trades'), fetch('/api/trade-reviews'), fetch(`/api/thesis-synthesis?ticker=${symbol}`), fetch(`/api/theses?ticker=${symbol}`), fetch(`/api/fundamentals?ticker=${symbol}`), fetch(`/api/financial-models?ticker=${symbol}`)]);
     if (c.ok) setCatalysts(await c.json());
     if (n.ok) setNotes(await n.json());
     if (w.ok) { const j = await w.json(); setWatchlistExists((j||[]).some((x:any)=>String(x.ticker||'').toUpperCase()===symbol)); }
@@ -59,6 +62,7 @@ export default function TickerPage({ params }: { params: { symbol: string } }) {
     if (syn.ok) setSyntheses(await syn.json());
     if (th.ok) setTheses(await th.json());
     if (fr.ok) setFundamentals(await fr.json());
+    if (fm.ok) setFinancialModels(await fm.json());
   }
   useEffect(() => { load(); }, [symbol]);
 
@@ -154,6 +158,15 @@ export default function TickerPage({ params }: { params: { symbol: string } }) {
     else { setFundMsg('Fundamental research report updated (paper-trading analysis only).'); await load(); }
   }
 
+
+  async function buildFinancialModel(){
+    setModelMsg('');
+    const r = await fetch('/api/financial-models/build', { method:'POST', body: JSON.stringify({ ticker:symbol, model_type:modelType||null, assumptions:{...assumptions, dilution_assumptions:{ dilution_percent:Number(assumptions.dilution_percent||0) }}, selected_sources:['fundamentals','market','clinical_trials'] }) });
+    const j=await r.json();
+    if(!r.ok) setModelMsg(j.error||'Financial model build failed.');
+    else { setModelMsg('Financial valuation model updated (paper-trading analysis only).'); await load(); }
+  }
+
   async function saveNote(e: React.FormEvent) {
     e.preventDefault();
     await fetch('/api/research-notes', { method: 'POST', body: JSON.stringify({ ticker: symbol, title: noteTitle || `Note ${new Date().toISOString()}`, raw_text: noteText, source_url: sourceUrl || null, source_type: sourceType, catalyst_id: attachCatalyst || null, user_id: '00000000-0000-0000-0000-000000000000' }) });
@@ -184,6 +197,29 @@ export default function TickerPage({ params }: { params: { symbol: string } }) {
         <a className='text-blue-400 text-xs' href={`/thesis/new?ticker=${symbol}`}>Use in thesis</a>
       </div>}
     </div>
+
+    <div className='bg-zinc-900 border border-zinc-800 rounded p-4 space-y-2'>
+      <h2 className='font-semibold'>Financial Model</h2>
+      <div className='text-xs text-zinc-400'>Valuation model with user-editable assumptions for paper-trading analysis only; not investment advice and not predictive.</div>
+      <div className='grid grid-cols-3 gap-2 text-sm'>
+        <select className='bg-zinc-800 p-2 rounded' value={modelType} onChange={e=>setModelType(e.target.value)}><option value=''>Auto model type</option><option value='dcf'>DCF</option><option value='risk_adjusted_pipeline'>Risk-adjusted pipeline</option><option value='hybrid'>Hybrid</option></select>
+        <input className='bg-zinc-800 p-2 rounded' value={assumptions.revenue_growth_rate} onChange={e=>setAssumptions({...assumptions,revenue_growth_rate:Number(e.target.value)})} placeholder='Revenue growth'/>
+        <input className='bg-zinc-800 p-2 rounded' value={assumptions.free_cash_flow_margin} onChange={e=>setAssumptions({...assumptions,free_cash_flow_margin:Number(e.target.value)})} placeholder='FCF margin'/>
+        <input className='bg-zinc-800 p-2 rounded' value={assumptions.discount_rate} onChange={e=>setAssumptions({...assumptions,discount_rate:Number(e.target.value)})} placeholder='Discount rate'/>
+        <input className='bg-zinc-800 p-2 rounded' value={assumptions.terminal_growth_rate} onChange={e=>setAssumptions({...assumptions,terminal_growth_rate:Number(e.target.value)})} placeholder='Terminal growth'/>
+        <input className='bg-zinc-800 p-2 rounded' value={assumptions.dilution_percent} onChange={e=>setAssumptions({...assumptions,dilution_percent:Number(e.target.value)})} placeholder='Dilution %'/>
+      </div>
+      <button className='bg-blue-600 rounded px-3 py-2' onClick={buildFinancialModel}>Build model</button>
+      {modelMsg && <div className='text-sm text-amber-300'>{modelMsg}</div>}
+      {(financialModels||[]).length===0 ? <div className='text-sm text-zinc-400'>No financial model yet.</div> : <div className='text-sm'>
+        <div>Suggested type: <b>{financialModels[0].model_type}</b></div>
+        <div>Intrinsic/share vs price: {financialModels[0].model_output?.intrinsic_value_per_share ?? 'missing'} vs {financialModels[0].model_output?.current_price ?? 'missing'} ({financialModels[0].model_output?.upside_downside_percent ?? 'missing'}%)</div>
+        <div>Scenario: {(financialModels[0].scenario_analysis?.scenario_table||[]).map((x:any)=>`${x.scenario}:${x.upside_downside_percent}`).join(' | ')}</div>
+        <div>Warnings: {(financialModels[0].model_output?.warnings||[]).join(' | ') || 'none'}</div>
+        <a className='text-blue-400 text-xs' href={`/thesis/new?ticker=${symbol}`}>Use in thesis</a>
+      </div>}
+    </div>
+
     <div className="bg-zinc-900 border border-zinc-800 rounded p-4">
       <h2 className="font-semibold">Manual Catalysts</h2>
       <form onSubmit={addCatalyst} className="grid grid-cols-3 gap-2 my-2">
