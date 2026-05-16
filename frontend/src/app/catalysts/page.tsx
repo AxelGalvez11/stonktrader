@@ -11,8 +11,18 @@ export default function CatalystsPage(){
   const filtered=useMemo(()=>items.filter(c=>!f.ticker||c.ticker===f.ticker.toUpperCase()).filter(c=>!f.risk||c.risk_level===f.risk).filter(c=>!f.status||c.status===f.status).filter(c=>{ if(f.window==='week'){const d=new Date(c.expected_date); const now=new Date(); return (d.getTime()-now.getTime())/86400000<=7;} if(f.window==='month'){const d=new Date(c.expected_date); const now=new Date(); return (d.getTime()-now.getTime())/86400000<=30;} return true;}),[items,f]);
   const groups=useMemo(()=>filtered.reduce((m,c)=>{const k=(c.expected_date||'missing').slice(0,7); (m[k]=m[k]||[]).push(c); return m;},{} as any),[filtered]);
   async function saveOutcome(e:any){ e.preventDefault(); await fetch('/api/catalysts/outcome',{method:'POST',body:JSON.stringify(outcome)}); setOutcome({ id:'', outcome:'', actual_event_date:'', outcome_summary:'', source_url:'', notes:'', paper_trade_id:''}); await load(); }
+  const now=Date.now();
+  const upcomingCount=filtered.filter(c=>c.expected_date&&new Date(c.expected_date).getTime()>=now).length;
+  const overdueCount=filtered.filter(c=>c.expected_date&&new Date(c.expected_date).getTime()<now&&!c.outcome).length;
+  const openTradeCount=filtered.filter(c=>c.status==='paper_trade_open').length;
+  const missingThesisCount=filtered.filter(c=>!c.thesis_id||c.status==='thesis_needed').length;
+  const missingSynthesisCount=filtered.filter(c=>c.status==='synthesis_needed').length;
+  const reviewNeededCount=filtered.filter(c=>c.status==='event_passed_review_needed').length;
   return <div className='p-6 space-y-4'>
-    <h1 className='text-2xl font-semibold'>Catalyst Calendar</h1><p className='text-sm text-zinc-400'>Research alerts only. Possible catalyst windows do not guarantee data release.</p>
+    <h1 className='text-2xl font-semibold'>Catalyst Calendar</h1><p className='text-sm text-zinc-400'>Research alerts only. Possible catalyst windows do not guarantee data release. Paper-trading only; no buy/sell alerts.</p>
+    <div className='grid grid-cols-6 gap-2 text-xs'>
+      <div className='bg-zinc-900 border border-zinc-800 rounded p-2'>Upcoming: {upcomingCount}</div><div className='bg-zinc-900 border border-zinc-800 rounded p-2'>Overdue: {overdueCount}</div><div className='bg-zinc-900 border border-zinc-800 rounded p-2'>Open paper trades: {openTradeCount}</div><div className='bg-zinc-900 border border-zinc-800 rounded p-2'>Missing thesis: {missingThesisCount}</div><div className='bg-zinc-900 border border-zinc-800 rounded p-2'>Missing synthesis: {missingSynthesisCount}</div><div className='bg-zinc-900 border border-zinc-800 rounded p-2'>Review needed: {reviewNeededCount}</div>
+    </div>
     <div className='grid grid-cols-6 gap-2 text-sm'>
       <input className='bg-zinc-800 p-2 rounded' placeholder='Ticker' value={f.ticker} onChange={e=>setF({...f,ticker:e.target.value})}/>
       <select className='bg-zinc-800 p-2 rounded' value={f.risk} onChange={e=>setF({...f,risk:e.target.value})}><option value=''>All risk</option><option>low</option><option>medium</option><option>high</option></select>

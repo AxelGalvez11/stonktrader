@@ -52,7 +52,7 @@ export default function ReviewPage() {
     </div>
 
     <form onSubmit={submit} className="bg-zinc-900 border border-zinc-800 rounded p-4 grid grid-cols-2 gap-2">
-      <select className="bg-zinc-800 p-2 rounded" value={form.paper_trade_id} onChange={e => setForm({ ...form, paper_trade_id: e.target.value })} required>
+      <select className="bg-zinc-800 p-2 rounded" value={form.paper_trade_id} onChange={e => { const id=e.target.value; const t=trades.find((x:any)=>String(x.id)===String(id)); setForm({ ...form, paper_trade_id: id, actual_event_date: t?.actual_exit_date || form.actual_event_date, catalyst_outcome: t?.catalyst_outcome || form.catalyst_outcome }); }} required>
         <option value="">Select paper trade</option>
         {trades.map(t => <option key={t.id} value={t.id}>{t.ticker} #{t.id} ({t.status})</option>)}
       </select>
