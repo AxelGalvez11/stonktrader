@@ -9,6 +9,11 @@ export default function TickerPage({ params }: { params: { symbol: string } }) {
   const [notes, setNotes] = useState<any[]>([]);
   const [title, setTitle] = useState('');
   const [expectedDate, setExpectedDate] = useState('');
+  const [catalystType, setCatalystType] = useState('manual');
+  const [dateConfidence, setDateConfidence] = useState('low');
+  const [riskLevel, setRiskLevel] = useState('medium');
+  const [catalystDescription, setCatalystDescription] = useState('');
+  const [catalystSourceUrl, setCatalystSourceUrl] = useState('');
   const [noteTitle, setNoteTitle] = useState('');
   const [noteText, setNoteText] = useState('');
   const [sourceUrl, setSourceUrl] = useState('');
@@ -33,8 +38,8 @@ export default function TickerPage({ params }: { params: { symbol: string } }) {
 
   async function addCatalyst(e: React.FormEvent) {
     e.preventDefault();
-    await fetch('/api/catalysts', { method: 'POST', body: JSON.stringify({ ticker: symbol, title, expected_date: expectedDate, catalyst_type: 'manual', risk_level: 'medium', status: 'upcoming' }) });
-    setTitle(''); setExpectedDate('');
+    await fetch('/api/catalysts', { method: 'POST', body: JSON.stringify({ ticker: symbol, title, expected_date: expectedDate, catalyst_type: catalystType, date_confidence: dateConfidence, risk_level: riskLevel, description: catalystDescription, source_url: catalystSourceUrl || null, status: 'upcoming' }) });
+    setTitle(''); setExpectedDate(''); setCatalystType('manual'); setDateConfidence('low'); setRiskLevel('medium'); setCatalystDescription(''); setCatalystSourceUrl('');
     await load();
   }
 
@@ -77,10 +82,15 @@ export default function TickerPage({ params }: { params: { symbol: string } }) {
     <div className="bg-zinc-900 border border-zinc-800 rounded p-4">Pipeline: missing</div>
     <div className="bg-zinc-900 border border-zinc-800 rounded p-4">
       <h2 className="font-semibold">Manual Catalysts</h2>
-      <form onSubmit={addCatalyst} className="flex gap-2 my-2">
+      <form onSubmit={addCatalyst} className="grid grid-cols-3 gap-2 my-2">
         <input className="bg-zinc-800 p-2 rounded" placeholder="Catalyst title" value={title} onChange={e => setTitle(e.target.value)} required />
         <input className="bg-zinc-800 p-2 rounded" type="date" value={expectedDate} onChange={e => setExpectedDate(e.target.value)} required />
-        <button className="bg-blue-600 rounded px-3">Add</button>
+        <select className="bg-zinc-800 p-2 rounded" value={catalystType} onChange={e=>setCatalystType(e.target.value)}><option value="manual">manual</option><option value="trial_data">trial_data</option><option value="completion_update">completion_update</option></select>
+        <select className="bg-zinc-800 p-2 rounded" value={dateConfidence} onChange={e=>setDateConfidence(e.target.value)}><option>low</option><option>moderate</option><option>high</option></select>
+        <select className="bg-zinc-800 p-2 rounded" value={riskLevel} onChange={e=>setRiskLevel(e.target.value)}><option>low</option><option>medium</option><option>high</option></select>
+        <input className="bg-zinc-800 p-2 rounded" placeholder="Source URL" value={catalystSourceUrl} onChange={e=>setCatalystSourceUrl(e.target.value)} />
+        <input className="bg-zinc-800 p-2 rounded col-span-3" placeholder="Description" value={catalystDescription} onChange={e=>setCatalystDescription(e.target.value)} />
+        <button className="bg-blue-600 rounded px-3 col-span-3">Add</button>
       </form>
       {catalysts.length === 0 ? <div className="text-sm text-zinc-400">No catalysts</div> : catalysts.map(c => <div key={c.id} className="text-sm py-1">{c.expected_date}: {c.title}</div>)}
     </div>
@@ -120,6 +130,7 @@ export default function TickerPage({ params }: { params: { symbol: string } }) {
           <div className="text-zinc-400">Primary completion: {t.primary_completion_date}</div>
           <div className="text-zinc-400">Potential catalyst: {x.potentialCatalyst.title} ({x.potentialCatalyst.expected_date})</div>
           <a className="text-blue-400 text-xs mr-3" href={t.source_url} target="_blank">Source</a>
+          <button className="text-blue-400 text-xs mr-3" onClick={() => { setTitle(x.potentialCatalyst.title); setExpectedDate(x.potentialCatalyst.expected_date === 'missing' ? '' : x.potentialCatalyst.expected_date); setCatalystType(x.potentialCatalyst.catalyst_type); setDateConfidence(x.potentialCatalyst.date_confidence); setRiskLevel(x.potentialCatalyst.risk_level); setCatalystDescription(x.potentialCatalyst.description); setCatalystSourceUrl(t.source_url); }}>Create potential catalyst</button>
           <a className="text-blue-400 text-xs" href={`/thesis/new?ticker=${symbol}`}>Use in thesis</a>
         </div>
       })}

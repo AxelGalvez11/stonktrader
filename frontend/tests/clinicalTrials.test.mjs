@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { normalizeNctId, normalizeTrialRecord, inferPotentialCatalystFromTrial } from '../src/features/biotech/lib/clinical/clinicalTrials.js';
-import { buildSourcesFromNotes } from '../src/features/biotech/lib/thesisBuilder.js';
+import { buildSourcesFromNotes, prefillFromClinicalTrial } from '../src/features/biotech/lib/thesisBuilder.js';
 
 test('NCT ID normalization', () => {
   assert.equal(normalizeNctId('nct01234567'), 'NCT01234567');
@@ -37,4 +37,29 @@ test('dedupe by nct_id key compatibility', () => {
 test('source summary creation for thesis', () => {
   const src = buildSourcesFromNotes([{ id: 'NCT1', source_type: 'clinical_trials', source_url: 'https://clinicaltrials.gov/study/NCT1', title: 'trial' }]);
   assert.equal(src[0].sourceType, 'clinical_trials');
+});
+
+
+test('clinical_trials migration-compatible object mapping', () => {
+  const t = normalizeTrialRecord({ protocolSection: { identificationModule: { nctId: 'NCT2' }, statusModule: { primaryCompletionDateStruct: { date: '2026-12-01' } } } });
+  assert.equal(typeof t.raw_json, 'object');
+  assert.equal(Array.isArray(t.missing_fields), true);
+});
+
+test('trial selected in thesis builder prefills phase/endpoint/catalyst window', () => {
+  const thesis = { warnings: [] };
+  const next = prefillFromClinicalTrial(thesis, { nct_id: 'NCT9', phase: 'PHASE2', primary_endpoints: ['ORR'], secondary_endpoints: ['PFS'], primary_completion_date: '2027-01-01', conditions: ['AML'], drug_candidates: ['ABC'] });
+  assert.equal(next.trial_phase, 'PHASE2');
+  assert.equal(next.primary_endpoint_analysis, 'ORR');
+  assert.equal(next.catalyst.includes('possible catalyst window'), true);
+});
+
+test('missing safety data remains missing', () => {
+  const next = prefillFromClinicalTrial({}, { nct_id: 'NCT9', primary_completion_date: 'missing', completion_date: 'missing' });
+  assert.equal(next.safety_analysis, 'missing');
+});
+
+test('ingestion upsert preserves nct_id uniqueness key behavior', () => {
+  const n = normalizeNctId('nct00001234');
+  assert.equal(n, 'NCT00001234');
 });

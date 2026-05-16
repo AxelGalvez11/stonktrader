@@ -3,71 +3,73 @@ import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { mockThesis } from '@/features/biotech/data/mockData';
 import { validateThesisJson } from '@/features/biotech/lib/thesisSchema';
-import { buildSourcesFromNotes, findMissingFields, generateDraftFromNotes, thesisQualityGates } from '@/features/biotech/lib/thesisBuilder.js';
+import { buildSourcesFromNotes, findMissingFields, generateDraftFromNotes, prefillFromClinicalTrial, thesisQualityGates } from '@/features/biotech/lib/thesisBuilder.js';
 import ThesisPreview from '@/features/biotech/components/ThesisPreview';
+import ClinicalTrialSourceCard from '@/features/biotech/components/ClinicalTrialSourceCard';
 
 export default function NewThesisPage() {
   const params = useSearchParams();
   const noteId = params.get('noteId');
   const tickerParam = params.get('ticker') || '';
   const [notes, setNotes] = useState<any[]>([]);
+  const [secSources, setSecSources] = useState<any[]>([]);
+  const [trialSources, setTrialSources] = useState<any[]>([]);
   const [selected, setSelected] = useState<string[]>(noteId ? [noteId] : []);
   const [thesis, setThesis] = useState<any>({ ...mockThesis, ticker: tickerParam || mockThesis.ticker });
-  const [jsonMode, setJsonMode] = useState(false);
-  const [jsonText, setJsonText] = useState(JSON.stringify(mockThesis, null, 2));
   const [msg, setMsg] = useState('');
 
   useEffect(() => {
     async function load() {
-      const r = await fetch(`/api/research-notes${tickerParam ? `?ticker=${tickerParam}` : ''}`);
-      if (r.ok) setNotes(await r.json());
+      const [n, s, t] = await Promise.all([
+        fetch(`/api/research-notes${tickerParam ? `?ticker=${tickerParam}` : ''}`),
+        tickerParam ? fetch(`/api/sec/filings?ticker=${tickerParam}`) : Promise.resolve(new Response(JSON.stringify({ filings: [] }))),
+        tickerParam ? fetch(`/api/clinical-trials/search?ticker=${tickerParam}`) : Promise.resolve(new Response(JSON.stringify({ trials: [] }))),
+      ]);
+      if (n.ok) setNotes(await n.json());
+      if (s.ok) setSecSources((await s.json()).filings || []);
+      if (t.ok) setTrialSources((await t.json()).trials || []);
     }
     load();
   }, [tickerParam]);
 
-  const selectedNotes = useMemo(() => notes.filter(n => selected.includes(n.id)), [notes, selected]);
-  const missing = useMemo(() => findMissingFields(thesis), [thesis]);
+  const sourceCandidates = useMemo(() => {
+    const a = notes.map((n:any)=>({ id:n.id, source_type:n.source_type||'manual', source_url:n.source_url||'missing', title:n.title||'note', raw_text:n.raw_text||'' }));
+    const b = secSources.map((s:any)=>({ id:`sec:${s.accessionNumber}`, source_type:'sec', source_url:`https://www.sec.gov/Archives/edgar/data/${Number(s.cik||0)}/${String(s.accessionNumber||'').replace(/-/g,'')}/${s.primaryDocument||''}`, title:`${s.filingType} ${s.filingDate}`, raw_text:'' }));
+    const c = trialSources.map((t:any)=>({ id:`ct:${t.nct_id}`, source_type:'clinical_trials', source_url:t.source_url, title:t.brief_title, trial:t, raw_text:'' }));
+    return [...a,...b,...c];
+  }, [notes, secSources, trialSources]);
 
-  function toggleSelect(id: string) { setSelected(s => s.includes(id) ? s.filter(x => x !== id) : [...s, id]); }
+  const selectedSources = useMemo(() => sourceCandidates.filter(s => selected.includes(s.id)), [sourceCandidates, selected]);
+  const missing = useMemo(() => findMissingFields(thesis), [thesis]);
+  const toggle = (id:string)=> setSelected(s=>s.includes(id)?s.filter(x=>x!==id):[...s,id]);
 
   function generateDraft() {
-    const d = generateDraftFromNotes({ ticker: thesis.ticker, company: thesis.company, notes: selectedNotes });
+    const d = generateDraftFromNotes({ ticker: thesis.ticker, company: thesis.company, notes: selectedSources });
+    const trial = (selectedSources.find((s:any)=>s.source_type==='clinical_trials') as any)?.trial;
+    if (trial) Object.assign(d, prefillFromClinicalTrial(d, trial));
     setThesis(d);
   }
 
   async function saveGuided() {
     setMsg('');
-    const draft = { ...thesis, source_summary: buildSourcesFromNotes(selectedNotes) };
-    const gate = thesisQualityGates(draft);
-    if (gate.length) { setMsg(gate.join(' | ')); return; }
-    const valid = validateThesisJson(draft);
-    if (!valid.ok) { setMsg((valid.errors || ['Invalid thesis']).join(' | ')); return; }
+    const draft = { ...thesis, source_summary: buildSourcesFromNotes(selectedSources) };
+    const gate = thesisQualityGates(draft); if (gate.length) return setMsg(gate.join(' | '));
+    const valid = validateThesisJson(draft); if (!valid.ok) return setMsg((valid.errors||['Invalid thesis']).join(' | '));
     const r = await fetch('/api/theses', { method: 'POST', body: JSON.stringify({ ticker: draft.ticker, thesis_json: draft, source_ids: draft.source_summary.map((s: any) => s.sourceId) }) });
-    setMsg(r.ok ? 'Thesis saved.' : `Save failed: ${(await r.json()).error}`);
-  }
-
-  async function saveJson() {
-    setMsg('');
-    let parsed: any;
-    try { parsed = JSON.parse(jsonText); } catch { setMsg('Invalid JSON'); return; }
-    const valid = validateThesisJson(parsed);
-    if (!valid.ok) { setMsg((valid.errors || ['Invalid thesis']).join(' | ')); return; }
-    if (!parsed.invalidation_criteria || parsed.invalidation_criteria === 'missing') { setMsg('Invalidation criteria required'); return; }
-    if (!parsed.source_summary?.length) { setMsg('Source summary required'); return; }
-    const r = await fetch('/api/theses', { method: 'POST', body: JSON.stringify({ ticker: parsed.ticker, thesis_json: parsed, source_ids: parsed.source_summary.map((s: any) => s.sourceId).filter(Boolean) }) });
     setMsg(r.ok ? 'Thesis saved.' : `Save failed: ${(await r.json()).error}`);
   }
 
   return <div className="p-6 space-y-4">
     <h1 className="text-2xl font-semibold">Guided Thesis Builder</h1>
-    <p className="text-sm text-zinc-400">Use public evidence only. Build a paper-trading thesis with explicit uncertainty and missing data.</p>
-
+    <p className="text-sm text-zinc-400">Paper-trading thesis only. Use public registry/filing data and preserve uncertainty.</p>
     <div className="bg-zinc-900 border border-zinc-800 rounded p-4 space-y-2">
-      <h2 className="font-semibold">Select research notes as sources</h2>
-      {notes.length === 0 ? <div className="text-sm text-zinc-400">No notes found for this ticker.</div> : notes.map(n => (
-        <label key={n.id} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={selected.includes(n.id)} onChange={() => toggleSelect(n.id)} /> {n.title} <span className="text-zinc-500">({n.source_type})</span></label>
+      <h2 className="font-semibold">Select sources (manual, SEC, Clinical Trials)</h2>
+      {sourceCandidates.map((s:any)=> s.source_type==='clinical_trials' ? (
+        <ClinicalTrialSourceCard key={s.id} trial={s.trial} selected={selected.includes(s.id)} onToggle={()=>toggle(s.id)} />
+      ) : (
+        <label key={s.id} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={selected.includes(s.id)} onChange={()=>toggle(s.id)} /> {s.title} <span className="text-zinc-500">({s.source_type})</span></label>
       ))}
-      <button className="bg-zinc-700 rounded px-3 py-2" onClick={generateDraft}>Generate draft from selected notes</button>
+      <button className="bg-zinc-700 rounded px-3 py-2" onClick={generateDraft}>Generate draft from selected sources</button>
     </div>
 
     <div className="grid grid-cols-2 gap-3 bg-zinc-900 border border-zinc-800 rounded p-4">
@@ -77,29 +79,10 @@ export default function NewThesisPage() {
           <textarea className="w-full bg-zinc-800 rounded p-2 text-sm" rows={k.includes('summary') || k.includes('analysis') || k.includes('case') ? 3 : 2} value={thesis[k] ?? ''} onChange={e => setThesis({ ...thesis, [k]: e.target.value })} />
         </div>
       ))}
-      <div>
-        <label className="block text-xs text-zinc-400">confidence_label</label>
-        <select className="w-full bg-zinc-800 rounded p-2" value={thesis.confidence_label} onChange={e => setThesis({ ...thesis, confidence_label: e.target.value })}>
-          <option value="low">low</option><option value="moderate">moderate</option><option value="high">high</option>
-        </select>
-      </div>
-      <div>
-        <label className="block text-xs text-zinc-400">warnings (comma-separated or "none identified")</label>
-        <input className="w-full bg-zinc-800 rounded p-2" value={(thesis.warnings || []).join(', ')} onChange={e => setThesis({ ...thesis, warnings: e.target.value.split(',').map((x: string) => x.trim()).filter(Boolean) })} />
-      </div>
     </div>
 
-    <ThesisPreview thesis={{ ...thesis, source_summary: buildSourcesFromNotes(selectedNotes) }} missing={missing} />
+    <ThesisPreview thesis={{ ...thesis, source_summary: buildSourcesFromNotes(selectedSources) }} missing={missing} />
     <button className="bg-blue-600 rounded px-3 py-2" onClick={saveGuided}>Save guided thesis</button>
-
-    <div className="pt-4 border-t border-zinc-800">
-      <button className="text-sm text-blue-400" onClick={() => setJsonMode(!jsonMode)}>Advanced JSON import</button>
-      {jsonMode && <div className="space-y-2 mt-2">
-        <textarea className="w-full h-72 bg-zinc-900 border border-zinc-800 rounded p-3 font-mono text-xs" value={jsonText} onChange={e => setJsonText(e.target.value)} />
-        <button className="bg-zinc-700 rounded px-3 py-2" onClick={saveJson}>Validate + Save JSON</button>
-      </div>}
-    </div>
-
     {msg && <div className="text-sm text-amber-300">{msg}</div>}
   </div>;
 }
