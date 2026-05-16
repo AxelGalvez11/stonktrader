@@ -42,7 +42,7 @@ export default function CloseTradeModal({ trade, onClose, onConfirm }: Props) {
         <div className="bg-zinc-800/50 rounded-lg p-3 text-sm space-y-1">
           <div className="flex justify-between"><span className="text-zinc-400">Direction</span><span className={trade.direction === 'long' ? 'text-emerald-400' : 'text-red-400'}>{trade.direction.toUpperCase()}</span></div>
           <div className="flex justify-between"><span className="text-zinc-400">Entry</span><span className="font-mono text-zinc-200">${formatNumber(trade.entry_price)}</span></div>
-          <div className="flex justify-between"><span className="text-zinc-400">Quantity</span><span className="font-mono text-zinc-200">{trade.quantity}</span></div>
+          <div className="flex justify-between"><span className="text-zinc-400">Quantity</span><span className="font-mono text-zinc-200">{trade.quantity ?? 1}</span></div>
         </div>
 
         <div>

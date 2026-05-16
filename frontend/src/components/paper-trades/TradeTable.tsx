@@ -53,13 +53,13 @@ export default function TradeTable({ trades, loading, onClose, onDelete }: Props
                 <td className="px-3 py-2.5 text-right font-mono text-xs text-zinc-300">
                   {t.exit_price ? `$${formatNumber(t.exit_price)}` : '—'}
                 </td>
-                <td className="px-3 py-2.5 text-right font-mono text-xs text-zinc-400">{t.quantity}</td>
+                <td className="px-3 py-2.5 text-right font-mono text-xs text-zinc-400">{t.quantity ?? 1}</td>
                 <td className="px-3 py-2.5 text-right">
                   {t.pnl_pct !== null ? (
                     <span className={cn('font-mono text-xs', pctColor(t.pnl_pct ?? 0))}>{formatPct(t.pnl_pct ?? 0)}</span>
                   ) : '—'}
                 </td>
-                <td className="px-3 py-2.5 text-xs text-zinc-500">{relativeTime(t.opened_at)}</td>
+                <td className="px-3 py-2.5 text-xs text-zinc-500">{relativeTime(t.opened_at ?? t.created_at)}</td>
                 <td className="px-3 py-2.5 flex gap-1 justify-end">
                   {t.status === 'open' && (
                     <button onClick={() => onClose(t.id)}

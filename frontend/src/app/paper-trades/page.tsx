@@ -1,72 +1,56 @@
 'use client';
-
 import { useState } from 'react';
-import { Plus } from 'lucide-react';
-import { useApi } from '@/hooks/useApi';
-import { paperTradesApi } from '@/lib/api';
-import TopBar from '@/components/layout/TopBar';
-import TradeTable from '@/components/paper-trades/TradeTable';
-import NewTradeModal from '@/components/paper-trades/NewTradeModal';
-import CloseTradeModal from '@/components/paper-trades/CloseTradeModal';
-import StatCard from '@/components/ui/StatCard';
-import type { PaperTrade, PaperTradeCreate } from '@/types';
-import { formatPct } from '@/lib/utils';
 
 export default function PaperTradesPage() {
-  const { data: trades, loading, refetch } = useApi(() => paperTradesApi.list(), []);
-  const [showNew, setShowNew] = useState(false);
-  const [closing, setClosing] = useState<PaperTrade | null>(null);
+  const [form, setForm] = useState({ ticker: '', thesis_id: '', stop_reason: '', paper_position_size: '', exit_plan: '' });
+  const [msg, setMsg] = useState('');
+  const [quoteInfo, setQuoteInfo] = useState<any>(null);
+  const [syn, setSyn] = useState<any>(null);
+  const [overrideReady, setOverrideReady] = useState(false);
 
-  const handleAdd = async (t: PaperTradeCreate) => {
-    await paperTradesApi.create(t);
-    refetch();
-  };
+  async function loadSynthesis(thesisId: string, ticker: string) {
+    if (!thesisId && !ticker) return;
+    const r = await fetch(`/api/thesis-synthesis?${thesisId ? `thesisId=${thesisId}` : `ticker=${ticker}`}`);
+    if (r.ok) { const rows = await r.json(); setSyn(Array.isArray(rows)?rows[0]:null); }
+  }
 
-  const handleClose = async (id: number, exitPrice: number) => {
-    await paperTradesApi.close(id, exitPrice);
-    refetch();
-  };
+  async function useLatestQuote() {
+    const t = form.ticker.toUpperCase();
+    if (!t) return setMsg('Enter ticker first');
+    const r = await fetch(`/api/market/quote?ticker=${t}`);
+    const j = await r.json();
+    if (!r.ok) return setMsg(j.error || 'Quote unavailable; enter manually.');
+    if (!j.price) return setMsg('Price missing; enter manually.');
+    setForm({ ...form, paper_position_size: form.paper_position_size, ticker: t });
+    setQuoteInfo(j);
+    setMsg(`Using latest quote ${j.price} from ${j.provider} at ${j.retrieved_at}. ${j.delayed ? 'market data may be delayed' : ''}`);
+  }
 
-  const handleDelete = async (id: number) => {
-    await paperTradesApi.delete(id);
-    refetch();
-  };
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    const entry = quoteInfo?.price;
+    const body = { ...form, ticker: form.ticker.toUpperCase(), entry_price: entry ?? null, paper_position_size: Number(form.paper_position_size), status: 'open' };
+    await loadSynthesis(form.thesis_id, body.ticker);
+    if (syn?.paper_trade_readiness==='not_ready' && !overrideReady) { setMsg('Synthesis not_ready. Add missing risk fields and acknowledge override.'); return; }
+    if (!body.entry_price && !form.ticker) { setMsg('Price missing and ticker missing.'); return; }
+    const r = await fetch('/api/paper-trades', { method: 'POST', body: JSON.stringify(body) });
+    const j = await r.json();
+    setMsg(r.ok ? 'Paper trade created.' : (j.error || 'Failed'));
+  }
 
-  const openTrades = (trades ?? []).filter(t => t.status === 'open');
-  const closedTrades = (trades ?? []).filter(t => t.status === 'closed');
-  const wins = closedTrades.filter(t => (t.pnl_pct ?? 0) > 0).length;
-  const winRate = closedTrades.length > 0 ? wins / closedTrades.length : 0;
-  const avgPnl = closedTrades.length > 0
-    ? closedTrades.reduce((sum, t) => sum + (t.pnl_pct ?? 0), 0) / closedTrades.length
-    : 0;
-
-  return (
-    <div>
-      <TopBar
-        title="Paper Trades"
-        subtitle={`${openTrades.length} open · ${closedTrades.length} closed`}
-        action={
-          <button onClick={() => setShowNew(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md bg-emerald-600 text-white hover:bg-emerald-500 transition-colors">
-            <Plus className="w-3.5 h-3.5" /> New Trade
-          </button>
-        }
-      />
-      <div className="p-6 space-y-6">
-        <div className="grid grid-cols-3 gap-4">
-          <StatCard label="Open Trades" value={openTrades.length} loading={loading} />
-          <StatCard label="Win Rate" value={closedTrades.length > 0 ? `${(winRate * 100).toFixed(0)}%` : '—'} loading={loading} />
-          <StatCard label="Avg P&L" value={closedTrades.length > 0 ? formatPct(avgPnl) : '—'} loading={loading} delta={avgPnl} />
-        </div>
-        <TradeTable
-          trades={trades ?? []}
-          loading={loading}
-          onClose={id => { const t = (trades ?? []).find(x => x.id === id); if (t) setClosing(t); }}
-          onDelete={handleDelete}
-        />
-      </div>
-      {showNew && <NewTradeModal onClose={() => setShowNew(false)} onAdd={handleAdd} />}
-      {closing && <CloseTradeModal trade={closing} onClose={() => setClosing(null)} onConfirm={handleClose} />}
-    </div>
-  );
+  return <div className="p-6 space-y-4">
+    <h1 className="text-2xl font-semibold">Paper Trades</h1>
+    <form onSubmit={submit} className="grid grid-cols-2 gap-2 bg-zinc-900 border border-zinc-800 rounded p-4 max-w-2xl">
+      <input className="bg-zinc-800 p-2 rounded" placeholder="Ticker" value={form.ticker} onChange={e=>setForm({...form,ticker:e.target.value})} required />
+      <input className="bg-zinc-800 p-2 rounded" placeholder="Thesis ID" value={form.thesis_id} onChange={e=>setForm({...form,thesis_id:e.target.value})} required />
+      <input className="bg-zinc-800 p-2 rounded" placeholder="Invalidation point" value={form.stop_reason} onChange={e=>setForm({...form,stop_reason:e.target.value})} required />
+      <input className="bg-zinc-800 p-2 rounded" type="number" placeholder="Position size" value={form.paper_position_size} onChange={e=>setForm({...form,paper_position_size:e.target.value})} required />
+      <input className="bg-zinc-800 p-2 rounded col-span-2" placeholder="Exit plan" value={form.exit_plan} onChange={e=>setForm({...form,exit_plan:e.target.value})} required />
+      <button type="button" onClick={useLatestQuote} className="bg-zinc-700 rounded px-3 py-2 col-span-2">Use latest quote as entry price</button>
+      {syn && <div className="text-xs text-amber-300 col-span-2">Synthesis readiness: {syn.paper_trade_readiness} (heuristic, approximate)</div>}
+      <label className="text-xs text-zinc-400 col-span-2 flex items-center gap-2"><input type="checkbox" checked={overrideReady} onChange={e=>setOverrideReady(e.target.checked)} /> Educational override for not_ready synthesis</label>
+      <button className="bg-blue-600 rounded px-3 py-2 col-span-2">Create paper trade</button>
+    </form>
+    {msg && <div className="text-sm text-amber-300">{msg}</div>}
+  </div>;
 }

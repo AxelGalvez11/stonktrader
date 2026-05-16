@@ -1,0 +1,12 @@
+alter table pubmed_sources add column if not exists ticker text;
+alter table pubmed_sources add column if not exists company_id uuid references companies(id) on delete set null;
+alter table pubmed_sources add column if not exists doi text;
+alter table pubmed_sources add column if not exists article_types text[];
+alter table pubmed_sources add column if not exists mesh_terms text[];
+alter table pubmed_sources add column if not exists keywords text[];
+alter table pubmed_sources add column if not exists relevance_reasons text[];
+alter table pubmed_sources add column if not exists scientific_signals jsonb;
+alter table pubmed_sources add column if not exists retrieved_at timestamptz;
+alter table pubmed_sources add column if not exists raw_json jsonb;
+alter table pubmed_sources add column if not exists updated_at timestamptz default now();
+create unique index if not exists pubmed_sources_pmid_key on pubmed_sources(pmid);
