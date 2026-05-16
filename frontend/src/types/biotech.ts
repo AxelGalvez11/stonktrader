@@ -1,5 +1,6 @@
 export type RiskLevel = 'low' | 'medium' | 'high' | 'unknown';
 export type WatchStatus = 'researching' | 'watching' | 'paper-traded' | 'archived';
+export type WatchBucket = 'anchor' | 'speculative' | 'lottery';
 
 export interface WatchlistItem {
   id: string;
@@ -8,6 +9,9 @@ export interface WatchlistItem {
   tags: string[];
   status: WatchStatus;
   subsector: string;
+  bucket: WatchBucket;
+  paperTradeRating?: string;
+  whatToWatch?: string[];
 }
 
 export interface Catalyst {

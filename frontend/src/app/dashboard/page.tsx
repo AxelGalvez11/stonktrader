@@ -7,7 +7,12 @@ export default function DashboardPage() {
     <p className="text-sm text-amber-300">This tool is for personal research and paper trading only. It does not provide financial advice, investment advice, or guaranteed predictions.</p>
     <p className="text-sm text-red-300">Do not enter confidential, leaked, or nonpublic clinical, FDA, company, or trial information.</p>
     <div className="grid grid-cols-3 gap-4">
-      <div className="bg-zinc-900 border border-zinc-800 rounded p-4">Watchlist: {mockWatchlist.length}</div>
+      <div className="grid grid-cols-3 gap-4 text-sm">
+      <div className="bg-zinc-900 border border-zinc-800 rounded p-3">Anchor: {mockWatchlist.filter(w => w.bucket === 'anchor').length}</div>
+      <div className="bg-zinc-900 border border-zinc-800 rounded p-3">Speculative: {mockWatchlist.filter(w => w.bucket === 'speculative').length}</div>
+      <div className="bg-zinc-900 border border-zinc-800 rounded p-3">Lottery: {mockWatchlist.filter(w => w.bucket === 'lottery').length}</div>
+    </div>
+    <div className="bg-zinc-900 border border-zinc-800 rounded p-4">Watchlist: {mockWatchlist.length}</div>
       <div className="bg-zinc-900 border border-zinc-800 rounded p-4">Upcoming catalysts: {mockCatalysts.length}</div>
       <div className="bg-zinc-900 border border-zinc-800 rounded p-4">Open paper trades: 1</div>
     </div>
