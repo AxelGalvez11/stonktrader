@@ -26,3 +26,12 @@ export function nextBestActions(status) {
   if (!actions.length) actions.push('Workflow baseline complete. Review analytics for observed pattern learning.');
   return actions;
 }
+
+
+export function buildLinkageWarnings(input={}) {
+  const w = [];
+  if ((input.paper_trades||[]).some((t)=>!t.thesis_id)) w.push('Paper trade missing thesis link.');
+  if ((input.syntheses||[]).some((s)=>s.ticker && !s.thesis_id)) w.push('Synthesis is ticker-level, not thesis-specific.');
+  if ((input.catalysts||[]).length>0 && (input.theses||[]).some((t)=>!t.catalyst_id)) w.push('Thesis not linked to catalyst.');
+  return [...new Set(w)];
+}

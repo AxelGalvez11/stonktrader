@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useMemo, useState } from 'react';
 import WorkflowChecklist from '@/features/biotech/components/workflow/WorkflowChecklist';
-import { buildWorkflowChecklist, nextBestActions } from '@/features/biotech/lib/workflow/workflowChecklist';
+import { buildLinkageWarnings, buildWorkflowChecklist, nextBestActions } from '@/features/biotech/lib/workflow/workflowChecklist';
 
 const SOURCE_TYPES = ['manual','company_ir','sec','pubmed','clinical_trials','fda','news','other'] as const;
 
@@ -43,17 +43,19 @@ export default function TickerPage({ params }: { params: { symbol: string } }) {
   const [paperTrades, setPaperTrades] = useState<any[]>([]);
   const [reviews, setReviews] = useState<any[]>([]);
   const [syntheses, setSyntheses] = useState<any[]>([]);
+  const [theses, setTheses] = useState<any[]>([]);
 
 
 
   async function load() {
-    const [c, n, w, p, r, syn] = await Promise.all([fetch(`/api/catalysts?ticker=${symbol}`), fetch(`/api/research-notes?ticker=${symbol}`), fetch('/api/watchlist'), fetch('/api/paper-trades'), fetch('/api/trade-reviews'), fetch(`/api/thesis-synthesis?ticker=${symbol}`)]);
+    const [c, n, w, p, r, syn, th] = await Promise.all([fetch(`/api/catalysts?ticker=${symbol}`), fetch(`/api/research-notes?ticker=${symbol}`), fetch('/api/watchlist'), fetch('/api/paper-trades'), fetch('/api/trade-reviews'), fetch(`/api/thesis-synthesis?ticker=${symbol}`), fetch(`/api/theses?ticker=${symbol}`)]);
     if (c.ok) setCatalysts(await c.json());
     if (n.ok) setNotes(await n.json());
     if (w.ok) { const j = await w.json(); setWatchlistExists((j||[]).some((x:any)=>String(x.ticker||'').toUpperCase()===symbol)); }
     if (p.ok) setPaperTrades((await p.json()).filter((x:any)=>String(x.ticker||'').toUpperCase()===symbol));
     if (r.ok) setReviews(await r.json());
     if (syn.ok) setSyntheses(await syn.json());
+    if (th.ok) setTheses(await th.json());
   }
   useEffect(() => { load(); }, [symbol]);
 
@@ -132,12 +134,13 @@ export default function TickerPage({ params }: { params: { symbol: string } }) {
     fda_count: fda.length,
     market_refreshed: !!market,
     catalyst_count: catalysts.length,
-    thesis_exists: notes.length>0,
+    thesis_exists: theses.length>0,
     synthesis_exists: syntheses.length>0,
     paper_trade_exists: paperTrades.length>0,
     review_exists: reviews.some((x:any)=>paperTrades.some((t:any)=>String(t.id)===String(x.paper_trade_id))),
-  }), [watchlistExists,secData,trials,pubmed,fda,market,catalysts,notes,syntheses,paperTrades,reviews]);
+  }), [watchlistExists,secData,trials,pubmed,fda,market,catalysts,theses,syntheses,paperTrades,reviews]);
   const actions = useMemo(()=>nextBestActions(checklist),[checklist]);
+  const linkageWarnings = useMemo(()=>buildLinkageWarnings({ paper_trades: paperTrades, syntheses, catalysts, theses }), [paperTrades, syntheses, catalysts, theses]);
 
   async function saveNote(e: React.FormEvent) {
     e.preventDefault();
@@ -150,6 +153,7 @@ export default function TickerPage({ params }: { params: { symbol: string } }) {
     <h1 className="text-2xl font-semibold">{symbol} detail</h1>
     <div className="bg-zinc-900 border border-zinc-800 rounded p-4">Company summary: missing</div>
     <WorkflowChecklist status={checklist} actions={actions} />
+    <div className="bg-zinc-900 border border-zinc-800 rounded p-3 text-xs"><b>Linked Research Objects</b> • theses {theses.length} • syntheses {syntheses.length} • open paper trades {paperTrades.filter((t:any)=>t.status==='open').length} • reviews {reviews.filter((x:any)=>paperTrades.some((t:any)=>String(t.id)===String(x.paper_trade_id))).length}{linkageWarnings.length>0 && <div className='text-amber-300 mt-1'>Warnings: {linkageWarnings.join(' | ')}</div>}</div>
     <div className="text-xs text-zinc-400">Quick links: <a className="text-blue-400" href={`/thesis/new?ticker=${symbol}`}>Thesis builder</a> • <a className="text-blue-400" href={`/paper-trades`}>Paper trades</a> • <a className="text-blue-400" href={`/review`}>Post-event review</a> • <a className="text-blue-400" href={`/analytics`}>Analytics</a></div>
     <div className="bg-zinc-900 border border-zinc-800 rounded p-4">Pipeline: missing</div>
     <div className="bg-zinc-900 border border-zinc-800 rounded p-4">
