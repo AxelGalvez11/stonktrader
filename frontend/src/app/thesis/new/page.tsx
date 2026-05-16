@@ -9,6 +9,7 @@ import ClinicalTrialSourceCard from '@/features/biotech/components/ClinicalTrial
 import PubMedSourceCard from '@/features/biotech/components/PubMedSourceCard';
 import FdaSourceCard from '@/features/biotech/components/FdaSourceCard';
 import SynthesisPanel from '@/features/biotech/components/SynthesisPanel';
+import DraftReviewPanel from '@/features/biotech/components/thesis/DraftReviewPanel';
 
 export default function NewThesisPage() {
   const params = useSearchParams();
@@ -24,6 +25,8 @@ export default function NewThesisPage() {
   const [msg, setMsg] = useState('');
   const [syn, setSyn] = useState<any>(null);
   const [ackWeak, setAckWeak] = useState(false);
+  const [draftLoading, setDraftLoading] = useState(false);
+  const [aiDraft, setAiDraft] = useState<any>(null);
 
   useEffect(() => {
     async function load() {
@@ -55,6 +58,22 @@ export default function NewThesisPage() {
   const selectedSources = useMemo(() => sourceCandidates.filter(s => selected.includes(s.id)), [sourceCandidates, selected]);
   const missing = useMemo(() => findMissingFields(thesis), [thesis]);
   const toggle = (id:string)=> setSelected(s=>s.includes(id)?s.filter(x=>x!==id):[...s,id]);
+
+  function applyDraftToForm(d:any){ setThesis({ ...thesis, ...d }); }
+
+  async function draftFromSelectedEvidence() {
+    if (!selectedSources.length) return setMsg('Select at least one source before requesting AI-assisted draft.');
+    setDraftLoading(true); setMsg('');
+    const payload = { ticker: thesis.ticker, companyName: thesis.company, catalystId: null, selectedSources: selectedSources.map((s:any)=>({ source_type:s.source_type, title:s.title, url:s.source_url, summary:s.raw_text||'', metadata:{ id:s.id } })), marketContext: {}, draftPreferences:{ tone:'conservative', includeFollowUpQuestions:true } };
+    const r = await fetch('/api/thesis-draft', { method:'POST', body: JSON.stringify(payload) });
+    const j = await r.json();
+    if (!r.ok) { setMsg(j.error || 'Draft failed. Manual builder remains available.'); setDraftLoading(false); return; }
+    setAiDraft(j.draft);
+    applyDraftToForm(j.draft);
+    if (!j.validation?.ok) setMsg(`Draft validation warnings: ${(j.validation.issues||[]).join(' | ')}`);
+    else setMsg('AI-assisted draft applied. Review fields and run synthesis before saving.');
+    setDraftLoading(false);
+  }
 
   function generateDraft() {
     const d = generateDraftFromNotes({ ticker: thesis.ticker, company: thesis.company, notes: selectedSources });
@@ -118,7 +137,9 @@ export default function NewThesisPage() {
       ) : (
         <label key={s.id} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={selected.includes(s.id)} onChange={()=>toggle(s.id)} /> {s.title} <span className="text-zinc-500">({s.source_type})</span></label>
       ))}
-      <button className="bg-zinc-700 rounded px-3 py-2" onClick={generateDraft}>Generate draft from selected sources</button>
+      <button className="bg-zinc-700 rounded px-3 py-2" onClick={generateDraft}>Generate local draft from selected sources</button>
+      <button className="bg-blue-600 rounded px-3 py-2" onClick={draftFromSelectedEvidence} disabled={draftLoading}>{draftLoading ? 'Drafting…' : 'Draft thesis from selected evidence'}</button>
+      <div className='text-xs text-amber-300'>AI draft is editable and may be incomplete. Uses only selected sources. Review all missing fields before saving.</div>
     </div>
 
     <div className="grid grid-cols-2 gap-3 bg-zinc-900 border border-zinc-800 rounded p-4">
@@ -130,6 +151,7 @@ export default function NewThesisPage() {
       ))}
     </div>
 
+    <DraftReviewPanel draft={aiDraft} onApply={aiDraft ? ()=>applyDraftToForm(aiDraft) : undefined} />
     <ThesisPreview thesis={{ ...thesis, source_summary: buildSourcesFromNotes(selectedSources) }} missing={missing} />
     <div className="flex gap-2"><button className="bg-zinc-700 rounded px-3 py-2" onClick={analyzeThesisQuality}>Analyze thesis quality</button><button className="bg-blue-600 rounded px-3 py-2" onClick={saveGuided}>Save guided thesis</button></div>
     <label className="text-xs text-zinc-400 flex items-center gap-2"><input type="checkbox" checked={ackWeak} onChange={e=>setAckWeak(e.target.checked)} /> Acknowledge educational override for weak/not_ready synthesis</label>
