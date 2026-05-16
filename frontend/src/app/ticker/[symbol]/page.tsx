@@ -44,11 +44,13 @@ export default function TickerPage({ params }: { params: { symbol: string } }) {
   const [reviews, setReviews] = useState<any[]>([]);
   const [syntheses, setSyntheses] = useState<any[]>([]);
   const [theses, setTheses] = useState<any[]>([]);
+  const [fundamentals, setFundamentals] = useState<any[]>([]);
+  const [fundMsg, setFundMsg] = useState('');
 
 
 
   async function load() {
-    const [c, n, w, p, r, syn, th] = await Promise.all([fetch(`/api/catalysts?ticker=${symbol}`), fetch(`/api/research-notes?ticker=${symbol}`), fetch('/api/watchlist'), fetch('/api/paper-trades'), fetch('/api/trade-reviews'), fetch(`/api/thesis-synthesis?ticker=${symbol}`), fetch(`/api/theses?ticker=${symbol}`)]);
+    const [c, n, w, p, r, syn, th, fr] = await Promise.all([fetch(`/api/catalysts?ticker=${symbol}`), fetch(`/api/research-notes?ticker=${symbol}`), fetch('/api/watchlist'), fetch('/api/paper-trades'), fetch('/api/trade-reviews'), fetch(`/api/thesis-synthesis?ticker=${symbol}`), fetch(`/api/theses?ticker=${symbol}`), fetch(`/api/fundamentals?ticker=${symbol}`)]);
     if (c.ok) setCatalysts(await c.json());
     if (n.ok) setNotes(await n.json());
     if (w.ok) { const j = await w.json(); setWatchlistExists((j||[]).some((x:any)=>String(x.ticker||'').toUpperCase()===symbol)); }
@@ -56,6 +58,7 @@ export default function TickerPage({ params }: { params: { symbol: string } }) {
     if (r.ok) setReviews(await r.json());
     if (syn.ok) setSyntheses(await syn.json());
     if (th.ok) setTheses(await th.json());
+    if (fr.ok) setFundamentals(await fr.json());
   }
   useEffect(() => { load(); }, [symbol]);
 
@@ -142,6 +145,15 @@ export default function TickerPage({ params }: { params: { symbol: string } }) {
   const actions = useMemo(()=>nextBestActions(checklist),[checklist]);
   const linkageWarnings = useMemo(()=>buildLinkageWarnings({ paper_trades: paperTrades, syntheses, catalysts, theses }), [paperTrades, syntheses, catalysts, theses]);
 
+
+  async function analyzeFundamentals(){
+    setFundMsg('');
+    const r = await fetch('/api/fundamentals/analyze', { method:'POST', body: JSON.stringify({ ticker: symbol, companyName: symbol, includeSec:true, includeMarketData:true, includePipelineContext:true }) });
+    const j = await r.json();
+    if(!r.ok) setFundMsg(j.error||'Fundamental analysis failed.');
+    else { setFundMsg('Fundamental research report updated (paper-trading analysis only).'); await load(); }
+  }
+
   async function saveNote(e: React.FormEvent) {
     e.preventDefault();
     await fetch('/api/research-notes', { method: 'POST', body: JSON.stringify({ ticker: symbol, title: noteTitle || `Note ${new Date().toISOString()}`, raw_text: noteText, source_url: sourceUrl || null, source_type: sourceType, catalyst_id: attachCatalyst || null, user_id: '00000000-0000-0000-0000-000000000000' }) });
@@ -156,6 +168,22 @@ export default function TickerPage({ params }: { params: { symbol: string } }) {
     <div className="bg-zinc-900 border border-zinc-800 rounded p-3 text-xs"><b>Linked Research Objects</b> • theses {theses.length} • syntheses {syntheses.length} • open paper trades {paperTrades.filter((t:any)=>t.status==='open').length} • reviews {reviews.filter((x:any)=>paperTrades.some((t:any)=>String(t.id)===String(x.paper_trade_id))).length}{linkageWarnings.length>0 && <div className='text-amber-300 mt-1'>Warnings: {linkageWarnings.join(' | ')}</div>}</div>
     <div className="text-xs text-zinc-400">Quick links: <a className="text-blue-400" href={`/thesis/new?ticker=${symbol}`}>Thesis builder</a> • <a className="text-blue-400" href={`/paper-trades`}>Paper trades</a> • <a className="text-blue-400" href={`/review`}>Post-event review</a> • <a className="text-blue-400" href={`/analytics`}>Analytics</a></div>
     <div className="bg-zinc-900 border border-zinc-800 rounded p-4">Pipeline: missing</div>
+    <div className='bg-zinc-900 border border-zinc-800 rounded p-4 space-y-2'>
+      <h2 className='font-semibold'>Fundamentals</h2>
+      <button className='bg-blue-600 rounded px-3 py-2' onClick={analyzeFundamentals}>Analyze fundamentals</button>
+      {fundMsg && <div className='text-sm text-amber-300'>{fundMsg}</div>}
+      {(fundamentals||[]).length===0 ? <div className='text-sm text-zinc-400'>No fundamental research report yet.</div> : <div className='text-sm space-y-1'>
+        <div>Company type: <b>{fundamentals[0].company_type}</b></div>
+        <div>Cash/runway: {fundamentals[0].financial_snapshot?.cash_and_equivalents ?? 'missing'} / {fundamentals[0].financial_snapshot?.estimated_runway_quarters ?? 'missing'} qtrs</div>
+        <div>Profitability/revenue: {fundamentals[0].financial_snapshot?.net_income ?? 'missing'} / {fundamentals[0].financial_snapshot?.revenue ?? 'missing'}</div>
+        <div>Valuation: P/S {fundamentals[0].valuation_metrics?.price_to_sales ?? 'missing'} | EV/S {fundamentals[0].valuation_metrics?.enterprise_value_to_sales ?? 'missing'}</div>
+        <div>Dilution risk: {fundamentals[0].biotech_specific_metrics?.dilution_risk ?? 'missing'}</div>
+        <div>Concentration: {fundamentals[0].biotech_specific_metrics?.product_concentration_risk ?? 'missing'}</div>
+        <div>Bull/Base/Bear: {fundamentals[0].bull_case} | {fundamentals[0].base_case} | {fundamentals[0].bear_case}</div>
+        <div>Missing data: {(fundamentals[0].missing_data||[]).join(', ') || 'none'}</div>
+        <a className='text-blue-400 text-xs' href={`/thesis/new?ticker=${symbol}`}>Use in thesis</a>
+      </div>}
+    </div>
     <div className="bg-zinc-900 border border-zinc-800 rounded p-4">
       <h2 className="font-semibold">Manual Catalysts</h2>
       <form onSubmit={addCatalyst} className="grid grid-cols-3 gap-2 my-2">

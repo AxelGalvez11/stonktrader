@@ -9,6 +9,12 @@ export function detectEvidenceConflicts(inputs){
   const trials=inputs.clinicalTrialsSources||[];
   const market=inputs.marketData||{};
   const trade=inputs.paperTradeDraft||{};
+  const fundamentals = (inputs.selectedSources||[]).filter(s=>s.source_type==='fundamentals').map(s=>s.fundamentals||{});
+  const f0 = fundamentals[0] || {};
+  if (f0?.fundamental_quality?.overall_label==='weak' && includesAny(thesis.bull_case,['strong','high conviction'])) c.push({severity:'major',msg:'Bull case may conflict with weak observed fundamental research quality.'});
+  if (Number(f0?.financial_snapshot?.estimated_runway_quarters||999) < 2 && includesAny(String(inputs.paperTradeDraft?.status||'open'),['open'])) c.push({severity:'major',msg:'Runway may be under 2 quarters while paper-trade readiness appears high.'});
+  if ((f0?.biotech_specific_metrics?.dilution_risk||'').toLowerCase()==='high' && includesAny(thesis.financial_risk,['low'])) c.push({severity:'major',msg:'Financial risk may be understated versus dilution evidence.'});
+
 
   if (pubmed.length && includesAny(thesis.bull_case,['strong','very','high conviction']) && pubmed.some(p=>(p.scientific_signals?.missing_fields||[]).length>4)) c.push({severity:'moderate',msg:'Bull case may overstate scientific support.'});
   if (trials.length && includesAny(thesis.catalyst,['confirmed','guaranteed','certain']) ) c.push({severity:'major',msg:'Trial completion date is not a guaranteed readout date.'});
@@ -49,7 +55,7 @@ export function scoreThesisQuality(thesis,sources,marketData,catalyst){
   if (thesis.financial_risk && thesis.dilution_risk && thesis.financial_risk!=='missing') score+=10;
   if (thesis.market_expectation && thesis.market_expectation!=='missing') score+=10;
   if ((thesis.warnings||[]).length) score+=5;
-  const conflicts=detectEvidenceConflicts({thesis,secSources:sources.filter(s=>s.source_type==='sec'),clinicalTrialsSources:sources.filter(s=>s.source_type==='clinical_trials'),pubmedSources:sources.filter(s=>s.source_type==='pubmed'),fdaSources:sources.filter(s=>s.source_type==='fda'),marketData});
+  const conflicts=detectEvidenceConflicts({thesis,selectedSources:sources,secSources:sources.filter(s=>s.source_type==='sec'),clinicalTrialsSources:sources.filter(s=>s.source_type==='clinical_trials'),pubmedSources:sources.filter(s=>s.source_type==='pubmed'),fdaSources:sources.filter(s=>s.source_type==='fda'),marketData,paperTradeDraft:{ status:'open' }});
   for(const x of conflicts) score-= x.severity==='major'?15:x.severity==='moderate'?8:3;
   score=Math.max(0,Math.min(100,score));
   return {score, conflicts};
