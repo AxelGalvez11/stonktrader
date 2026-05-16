@@ -76,7 +76,7 @@ export default function MemeCoinDetailModal({ coin: c, onClose, onWatchlist }: P
               ))}
               <div className="flex items-center justify-between pt-1 border-t border-zinc-800">
                 <span className="text-xs text-zinc-400">Volume 24H</span>
-                <span className="font-mono text-xs text-zinc-300">{formatMarketCap(c.volume_24h)}</span>
+                <span className="font-mono text-xs text-zinc-300">{formatMarketCap(c.volume_24h ?? 0)}</span>
               </div>
             </div>
           </div>
