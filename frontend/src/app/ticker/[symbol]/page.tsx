@@ -1,5 +1,7 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import WorkflowChecklist from '@/features/biotech/components/workflow/WorkflowChecklist';
+import { buildWorkflowChecklist, nextBestActions } from '@/features/biotech/lib/workflow/workflowChecklist';
 
 const SOURCE_TYPES = ['manual','company_ir','sec','pubmed','clinical_trials','fda','news','other'] as const;
 
@@ -37,13 +39,21 @@ export default function TickerPage({ params }: { params: { symbol: string } }) {
   const [market, setMarket] = useState<any>(null);
   const [marketMsg, setMarketMsg] = useState('');
   const [marketLoading, setMarketLoading] = useState(false);
+  const [watchlistExists, setWatchlistExists] = useState(false);
+  const [paperTrades, setPaperTrades] = useState<any[]>([]);
+  const [reviews, setReviews] = useState<any[]>([]);
+  const [syntheses, setSyntheses] = useState<any[]>([]);
 
 
 
   async function load() {
-    const [c, n] = await Promise.all([fetch(`/api/catalysts?ticker=${symbol}`), fetch(`/api/research-notes?ticker=${symbol}`)]);
+    const [c, n, w, p, r, syn] = await Promise.all([fetch(`/api/catalysts?ticker=${symbol}`), fetch(`/api/research-notes?ticker=${symbol}`), fetch('/api/watchlist'), fetch('/api/paper-trades'), fetch('/api/trade-reviews'), fetch(`/api/thesis-synthesis?ticker=${symbol}`)]);
     if (c.ok) setCatalysts(await c.json());
     if (n.ok) setNotes(await n.json());
+    if (w.ok) { const j = await w.json(); setWatchlistExists((j||[]).some((x:any)=>String(x.ticker||'').toUpperCase()===symbol)); }
+    if (p.ok) setPaperTrades((await p.json()).filter((x:any)=>String(x.ticker||'').toUpperCase()===symbol));
+    if (r.ok) setReviews(await r.json());
+    if (syn.ok) setSyntheses(await syn.json());
   }
   useEffect(() => { load(); }, [symbol]);
 
@@ -113,6 +123,22 @@ export default function TickerPage({ params }: { params: { symbol: string } }) {
     setSecLoading(false);
   }
 
+
+  const checklist = useMemo(()=>buildWorkflowChecklist({
+    watchlist_exists: watchlistExists,
+    sec_count: secData.length,
+    clinical_trials_count: trials.length,
+    pubmed_count: pubmed.length,
+    fda_count: fda.length,
+    market_refreshed: !!market,
+    catalyst_count: catalysts.length,
+    thesis_exists: notes.length>0,
+    synthesis_exists: syntheses.length>0,
+    paper_trade_exists: paperTrades.length>0,
+    review_exists: reviews.some((x:any)=>paperTrades.some((t:any)=>String(t.id)===String(x.paper_trade_id))),
+  }), [watchlistExists,secData,trials,pubmed,fda,market,catalysts,notes,syntheses,paperTrades,reviews]);
+  const actions = useMemo(()=>nextBestActions(checklist),[checklist]);
+
   async function saveNote(e: React.FormEvent) {
     e.preventDefault();
     await fetch('/api/research-notes', { method: 'POST', body: JSON.stringify({ ticker: symbol, title: noteTitle || `Note ${new Date().toISOString()}`, raw_text: noteText, source_url: sourceUrl || null, source_type: sourceType, catalyst_id: attachCatalyst || null, user_id: '00000000-0000-0000-0000-000000000000' }) });
@@ -123,6 +149,8 @@ export default function TickerPage({ params }: { params: { symbol: string } }) {
   return <div className="p-6 space-y-4">
     <h1 className="text-2xl font-semibold">{symbol} detail</h1>
     <div className="bg-zinc-900 border border-zinc-800 rounded p-4">Company summary: missing</div>
+    <WorkflowChecklist status={checklist} actions={actions} />
+    <div className="text-xs text-zinc-400">Quick links: <a className="text-blue-400" href={`/thesis/new?ticker=${symbol}`}>Thesis builder</a> • <a className="text-blue-400" href={`/paper-trades`}>Paper trades</a> • <a className="text-blue-400" href={`/review`}>Post-event review</a> • <a className="text-blue-400" href={`/analytics`}>Analytics</a></div>
     <div className="bg-zinc-900 border border-zinc-800 rounded p-4">Pipeline: missing</div>
     <div className="bg-zinc-900 border border-zinc-800 rounded p-4">
       <h2 className="font-semibold">Manual Catalysts</h2>
@@ -136,7 +164,7 @@ export default function TickerPage({ params }: { params: { symbol: string } }) {
         <input className="bg-zinc-800 p-2 rounded col-span-3" placeholder="Description" value={catalystDescription} onChange={e=>setCatalystDescription(e.target.value)} />
         <button className="bg-blue-600 rounded px-3 col-span-3">Add</button>
       </form>
-      {catalysts.length === 0 ? <div className="text-sm text-zinc-400">No catalysts</div> : catalysts.map(c => <div key={c.id} className="text-sm py-1">{c.expected_date}: {c.title}</div>)}
+      {catalysts.length === 0 ? <div className="text-sm text-zinc-400">No catalysts yet. Add a possible catalyst window to unlock downstream workflow.</div> : catalysts.map(c => <div key={c.id} className="text-sm py-1">{c.expected_date}: {c.title}</div>)}
     </div>
 
 
@@ -164,7 +192,7 @@ export default function TickerPage({ params }: { params: { symbol: string } }) {
       <h2 className="font-semibold">Clinical Trials</h2>
       <button className="bg-blue-600 rounded px-3 py-2" onClick={fetchClinicalTrials} disabled={trialLoading}>{trialLoading ? 'Fetching…' : 'Fetch clinical trials'}</button>
       {trialMsg && <div className="text-sm text-amber-300">{trialMsg}</div>}
-      {trials.length === 0 ? <div className="text-sm text-zinc-400">No trials fetched yet.</div> : trials.map((x:any) => {
+      {trials.length === 0 ? <div className="text-sm text-zinc-400">No ClinicalTrials records yet. Try again later or adjust company/ticker assumptions.</div> : trials.map((x:any) => {
         const t = x.trial;
         return <div key={t.nct_id} className="border-t border-zinc-800 py-2 text-sm"> 
           <div><b>{t.nct_id}</b> • {t.phase} • {t.status}</div>
@@ -186,7 +214,7 @@ export default function TickerPage({ params }: { params: { symbol: string } }) {
       <div className="flex gap-2"><input className="bg-zinc-800 p-2 rounded flex-1" placeholder="Search PubMed query" value={pubmedQuery} onChange={e=>setPubmedQuery(e.target.value)} />
       <button className="bg-blue-600 rounded px-3 py-2" onClick={searchPubMed} disabled={pubmedLoading}>{pubmedLoading ? 'Searching…' : 'Search PubMed'}</button></div>
       {pubmedMsg && <div className="text-sm text-amber-300">{pubmedMsg}</div>}
-      {pubmed.length===0 ? <div className="text-sm text-zinc-400">No PubMed articles loaded.</div> : pubmed.map((a:any)=><div key={a.pmid} className="border-t border-zinc-800 py-2 text-sm"><div><b>PMID {a.pmid}</b> {a.title}</div><div className="text-zinc-400">{a.journal} {a.publication_date} relevance {a.relevance_score}</div><div className="text-zinc-400">{String(a.abstract||'').slice(0,180)}</div><a className="text-blue-400 text-xs" href={`/thesis/new?ticker=${symbol}`}>Use in thesis</a></div>)}
+      {pubmed.length===0 ? <div className="text-sm text-zinc-400">No PubMed results yet. Provider may be unavailable or query may be too narrow.</div> : pubmed.map((a:any)=><div key={a.pmid} className="border-t border-zinc-800 py-2 text-sm"><div><b>PMID {a.pmid}</b> {a.title}</div><div className="text-zinc-400">{a.journal} {a.publication_date} relevance {a.relevance_score}</div><div className="text-zinc-400">{String(a.abstract||'').slice(0,180)}</div><a className="text-blue-400 text-xs" href={`/thesis/new?ticker=${symbol}`}>Use in thesis</a></div>)}
     </div>
 
 
@@ -195,7 +223,7 @@ export default function TickerPage({ params }: { params: { symbol: string } }) {
       <div className="flex gap-2"><input className="bg-zinc-800 p-2 rounded flex-1" placeholder="Search FDA query" value={fdaQuery} onChange={e=>setFdaQuery(e.target.value)} />
       <button className="bg-blue-600 rounded px-3 py-2" onClick={searchFda} disabled={fdaLoading}>{fdaLoading ? 'Searching…' : 'Search FDA'}</button></div>
       {fdaMsg && <div className="text-sm text-amber-300">{fdaMsg}</div>}
-      {fda.length===0 ? <div className="text-sm text-zinc-400">No FDA sources loaded.</div> : fda.map((r:any)=><div key={r.fda_source_id+r.title} className="border-t border-zinc-800 py-2 text-sm"><div><b>{r.source_kind}</b> {r.title}</div><div className="text-zinc-400">{r.drug_name} • {r.sponsor} • {r.approval_date}</div><div className="text-zinc-400">Regulatory context: boxed {(r.regulatory_signals?.boxed_warning||[]).length}, contraindications {(r.regulatory_signals?.contraindications||[]).length}, advisory {(r.regulatory_signals?.advisory_committee_concerns||[]).length}</div><a className="text-blue-400 text-xs" href={`/thesis/new?ticker=${symbol}`}>Use in thesis</a></div>)}
+      {fda.length===0 ? <div className="text-sm text-zinc-400">No FDA results yet. Try broader safety/label terms or retry later.</div> : fda.map((r:any)=><div key={r.fda_source_id+r.title} className="border-t border-zinc-800 py-2 text-sm"><div><b>{r.source_kind}</b> {r.title}</div><div className="text-zinc-400">{r.drug_name} • {r.sponsor} • {r.approval_date}</div><div className="text-zinc-400">Regulatory context: boxed {(r.regulatory_signals?.boxed_warning||[]).length}, contraindications {(r.regulatory_signals?.contraindications||[]).length}, advisory {(r.regulatory_signals?.advisory_committee_concerns||[]).length}</div><a className="text-blue-400 text-xs" href={`/thesis/new?ticker=${symbol}`}>Use in thesis</a></div>)}
     </div>
 
 
