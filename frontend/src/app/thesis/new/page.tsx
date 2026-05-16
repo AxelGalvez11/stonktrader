@@ -27,6 +27,7 @@ export default function NewThesisPage() {
   const [ackWeak, setAckWeak] = useState(false);
   const [draftLoading, setDraftLoading] = useState(false);
   const [aiDraft, setAiDraft] = useState<any>(null);
+  const [aiMeta, setAiMeta] = useState<any>(null);
 
   useEffect(() => {
     async function load() {
@@ -67,8 +68,8 @@ export default function NewThesisPage() {
     const payload = { ticker: thesis.ticker, companyName: thesis.company, catalystId: null, selectedSources: selectedSources.map((s:any)=>({ source_type:s.source_type, title:s.title, url:s.source_url, summary:s.raw_text||'', metadata:{ id:s.id } })), marketContext: {}, draftPreferences:{ tone:'conservative', includeFollowUpQuestions:true } };
     const r = await fetch('/api/thesis-draft', { method:'POST', body: JSON.stringify(payload) });
     const j = await r.json();
-    if (!r.ok) { setMsg(j.error || 'Draft failed. Manual builder remains available.'); setDraftLoading(false); return; }
-    setAiDraft(j.draft);
+    if (!r.ok) { setMsg((j.error || 'Draft failed. Manual builder remains available.') + (j.validation?.issues ? ` | ${j.validation.issues.join(' | ')}` : '')); setAiMeta(j); setDraftLoading(false); return; }
+    setAiDraft(j.draft); setAiMeta(j);
     applyDraftToForm(j.draft);
     if (!j.validation?.ok) setMsg(`Draft validation warnings: ${(j.validation.issues||[]).join(' | ')}`);
     else setMsg('AI-assisted draft applied. Review fields and run synthesis before saving.');
@@ -151,7 +152,7 @@ export default function NewThesisPage() {
       ))}
     </div>
 
-    <DraftReviewPanel draft={aiDraft} onApply={aiDraft ? ()=>applyDraftToForm(aiDraft) : undefined} />
+    <DraftReviewPanel draft={aiDraft} meta={aiMeta} onApply={aiDraft ? ()=>applyDraftToForm(aiDraft) : undefined} />
     <ThesisPreview thesis={{ ...thesis, source_summary: buildSourcesFromNotes(selectedSources) }} missing={missing} />
     <div className="flex gap-2"><button className="bg-zinc-700 rounded px-3 py-2" onClick={analyzeThesisQuality}>Analyze thesis quality</button><button className="bg-blue-600 rounded px-3 py-2" onClick={saveGuided}>Save guided thesis</button></div>
     <label className="text-xs text-zinc-400 flex items-center gap-2"><input type="checkbox" checked={ackWeak} onChange={e=>setAckWeak(e.target.checked)} /> Acknowledge educational override for weak/not_ready synthesis</label>
