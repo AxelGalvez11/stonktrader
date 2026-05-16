@@ -6,19 +6,22 @@ export default function DashboardPage() {
   const [alerts, setAlerts] = useState<any[]>([]);
   const [trades, setTrades] = useState<any[]>([]);
   const [syntheses, setSyntheses] = useState<any[]>([]);
+  const [learning, setLearning] = useState<any>(null);
 
   useEffect(() => {
     async function load() {
-      const [c, a, t, s] = await Promise.all([
+      const [c, a, t, s, l] = await Promise.all([
         fetch('/api/catalysts'),
         fetch('/api/catalyst-alerts'),
         fetch('/api/paper-trades'),
         fetch('/api/thesis-synthesis'),
+        fetch('/api/analytics/learning'),
       ]);
       if (c.ok) setCatalysts(await c.json());
       if (a.ok) setAlerts((await a.json()).alerts || []);
       if (t.ok) setTrades(await t.json());
       if (s.ok) setSyntheses(await s.json());
+      if (l.ok) setLearning(await l.json());
     }
     load();
   }, []);
@@ -48,6 +51,15 @@ export default function DashboardPage() {
     <div className="bg-zinc-900 border border-zinc-800 rounded p-4">
       <h2 className="font-medium mb-2">Top 5 Research Alerts</h2>
       {alerts.slice(0, 5).map((a, idx) => <div key={`${a.alert_type}-${idx}`} className="py-2 border-b border-zinc-800/40 text-sm">{a.ticker} — {a.message}</div>)}
+    </div>
+
+    <div className="bg-zinc-900 border border-zinc-800 rounded p-4 text-sm">
+      <h2 className="font-medium mb-2">Learning insights</h2>
+      <div>Top recurring mistake: {learning?.mistake_patterns?.top_recurring?.[0]?.category || 'n/a'}</div>
+      <div>Review-needed count: {reviewNeededTrades.length}</div>
+      <div>Average thesis score: {learning?.overview?.average_thesis_quality_score?.toFixed?.(2) ?? 'n/a'}</div>
+      <div>Top learning recommendation: {learning?.recommendations?.[0] || 'Collect more paper-trade reviews.'}</div>
+      <a className="text-blue-400" href="/analytics">Open learning analytics</a>
     </div>
   </div>;
 }
