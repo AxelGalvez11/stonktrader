@@ -17,6 +17,7 @@ const NAV = [
   { href: '/watchlist',    label: 'Watchlist',    icon: Star },
   { href: '/thesis/new',   label: 'New Thesis',   icon: BookOpen },
   { href: '/paper-trades', label: 'Paper Trades', icon: BookOpen },
+  { href: '/review',       label: 'Review',       icon: BarChart2 },
   { href: '/diagnostics',  label: 'Diagnostics',  icon: BarChart2 },
   { href: '/settings',     label: 'Settings',     icon: Settings },
 ];
