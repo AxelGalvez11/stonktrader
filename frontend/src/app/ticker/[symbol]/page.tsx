@@ -34,6 +34,9 @@ export default function TickerPage({ params }: { params: { symbol: string } }) {
   const [fdaLoading, setFdaLoading] = useState(false);
   const [fda, setFda] = useState<any[]>([]);
   const [fdaMsg, setFdaMsg] = useState('');
+  const [market, setMarket] = useState<any>(null);
+  const [marketMsg, setMarketMsg] = useState('');
+  const [marketLoading, setMarketLoading] = useState(false);
 
 
 
@@ -59,6 +62,17 @@ export default function TickerPage({ params }: { params: { symbol: string } }) {
 
 
 
+
+
+  async function refreshMarketData() {
+    setMarketLoading(true); setMarketMsg('');
+    const catalystDate = catalysts?.[0]?.expected_date;
+    const r = await fetch('/api/market/refresh', { method: 'POST', body: JSON.stringify({ ticker: symbol, range: '6mo', catalystDate }) });
+    const j = await r.json();
+    if (!r.ok) setMarketMsg(j.error || 'Market refresh failed. Market data may be delayed.');
+    else setMarket(j);
+    setMarketLoading(false);
+  }
 
   async function searchFda() {
     setFdaLoading(true); setFdaMsg('');
@@ -182,6 +196,20 @@ export default function TickerPage({ params }: { params: { symbol: string } }) {
       <button className="bg-blue-600 rounded px-3 py-2" onClick={searchFda} disabled={fdaLoading}>{fdaLoading ? 'Searching…' : 'Search FDA'}</button></div>
       {fdaMsg && <div className="text-sm text-amber-300">{fdaMsg}</div>}
       {fda.length===0 ? <div className="text-sm text-zinc-400">No FDA sources loaded.</div> : fda.map((r:any)=><div key={r.fda_source_id+r.title} className="border-t border-zinc-800 py-2 text-sm"><div><b>{r.source_kind}</b> {r.title}</div><div className="text-zinc-400">{r.drug_name} • {r.sponsor} • {r.approval_date}</div><div className="text-zinc-400">Regulatory context: boxed {(r.regulatory_signals?.boxed_warning||[]).length}, contraindications {(r.regulatory_signals?.contraindications||[]).length}, advisory {(r.regulatory_signals?.advisory_committee_concerns||[]).length}</div><a className="text-blue-400 text-xs" href={`/thesis/new?ticker=${symbol}`}>Use in thesis</a></div>)}
+    </div>
+
+
+    <div className="bg-zinc-900 border border-zinc-800 rounded p-4 space-y-2">
+      <h2 className="font-semibold">Market Data</h2>
+      <button className="bg-blue-600 rounded px-3 py-2" onClick={refreshMarketData} disabled={marketLoading}>{marketLoading ? 'Refreshing…' : 'Refresh market data'}</button>
+      {marketMsg && <div className="text-sm text-amber-300">{marketMsg}</div>}
+      {!market ? <div className="text-sm text-zinc-400">No market data loaded. Paper-trading analysis only. Market data may be delayed.</div> : <div className="text-sm space-y-1">
+        <div>Quote: {market.quote?.price ?? 'missing'} ({market.quote?.provider}) {market.quote?.delayed ? 'delayed' : 'real-time unknown'}</div>
+        <div>Market cap: {market.quote?.market_cap ?? 'missing'} | Volume: {market.quote?.volume ?? 'missing'} vs avg {market.quote?.average_volume ?? 'missing'}</div>
+        <div>Liquidity flags: {(market.derived?.liquidity_flags || []).join(' | ') || 'missing'}</div>
+        <div>Volatility summary (approximate): {JSON.stringify(market.derived?.volatility_summary || {})}</div>
+        <div>Pre-catalyst run-up (approximate): {JSON.stringify(market.derived?.pre_catalyst_runup || {})}</div>
+      </div>}
     </div>
 
     <div className="bg-zinc-900 border border-zinc-800 rounded p-4 space-y-3">

@@ -22,6 +22,15 @@ export default function ReviewPage() {
   const awaitingReview = trades.filter(t => t.thesis_id && (t.status === 'closed_unreviewed' || t.status === 'closed'));
   const reviewedTrades = trades.filter(t => t.status === 'reviewed' || reviewedIds.has(String(t.id)));
 
+  async function autoCalcMoves(date: string, ticker: string) {
+    if (!date || !ticker) return;
+    const r = await fetch('/api/market/refresh', { method: 'POST', body: JSON.stringify({ ticker, range: '6mo', eventDate: date }) });
+    if (!r.ok) return;
+    const j = await r.json();
+    const d = j.derived?.post_catalyst_move || {};
+    setMsg(`Auto-calculated approximate moves: 1d ${d.move_1d_percent}, 3d ${d.move_3d_percent}, 5d ${d.move_5d_percent}, 10d ${d.move_10d_percent}`);
+  }
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     const body = { ...form, paper_trade_id: form.paper_trade_id, exit_price: form.exit_price ? Number(form.exit_price) : null, result_percent: form.result_percent ? Number(form.result_percent) : null, result_dollars: form.result_dollars ? Number(form.result_dollars) : null };
@@ -48,7 +57,7 @@ export default function ReviewPage() {
         {trades.map(t => <option key={t.id} value={t.id}>{t.ticker} #{t.id} ({t.status})</option>)}
       </select>
       <input className="bg-zinc-800 p-2 rounded" placeholder="Catalyst outcome" value={form.catalyst_outcome} onChange={e => setForm({ ...form, catalyst_outcome: e.target.value })} required />
-      <input className="bg-zinc-800 p-2 rounded" type="date" value={form.actual_event_date} onChange={e => setForm({ ...form, actual_event_date: e.target.value })} />
+      <input className="bg-zinc-800 p-2 rounded" type="date" value={form.actual_event_date} onChange={e => { const d=e.target.value; setForm({ ...form, actual_event_date: d }); const t=trades.find(x=>String(x.id)===String(form.paper_trade_id)); autoCalcMoves(d, t?.ticker||''); }} />
       <input className="bg-zinc-800 p-2 rounded" placeholder="Stock reaction % or not available" value={form.stock_reaction_percent} onChange={e => setForm({ ...form, stock_reaction_percent: e.target.value })} required />
       <input className="bg-zinc-800 p-2 rounded" placeholder="Exit price" value={form.exit_price} onChange={e => setForm({ ...form, exit_price: e.target.value })} />
       <input className="bg-zinc-800 p-2 rounded" placeholder="Result %" value={form.result_percent} onChange={e => setForm({ ...form, result_percent: e.target.value })} />
