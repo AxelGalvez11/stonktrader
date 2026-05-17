@@ -57,3 +57,18 @@ export function thesisQualityGates(thesis) {
 export function findMissingFields(thesis) {
   return Object.entries(thesis).filter(([_,v]) => v === 'missing' || (Array.isArray(v) && v.includes('missing'))).map(([k]) => k);
 }
+
+
+export function prefillFromClinicalTrial(thesis, trial) {
+  const next = { ...thesis };
+  next.drug = (trial?.drug_candidates || [])[0] || next.drug || 'missing';
+  next.indication = (trial?.conditions || [])[0] || next.indication || 'missing';
+  next.trial_phase = trial?.phase || next.trial_phase || 'missing';
+  next.primary_endpoint_analysis = (trial?.primary_endpoints || [])[0] || next.primary_endpoint_analysis || 'missing';
+  next.secondary_endpoint_analysis = (trial?.secondary_endpoints || [])[0] || next.secondary_endpoint_analysis || 'missing';
+  next.expected_date = trial?.primary_completion_date !== 'missing' ? trial?.primary_completion_date : (trial?.completion_date || next.expected_date || 'missing');
+  next.catalyst = trial?.nct_id ? `${trial.nct_id} possible catalyst window` : (next.catalyst || 'missing');
+  next.safety_analysis = next.safety_analysis || 'missing';
+  next.warnings = Array.from(new Set([...(next.warnings || []), 'Trial completion date does not guarantee data release.']));
+  return next;
+}

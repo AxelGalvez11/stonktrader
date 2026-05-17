@@ -1,0 +1,20 @@
+create table if not exists thesis_syntheses (
+  id uuid primary key default uuid_generate_v4(),
+  thesis_id uuid,
+  ticker text,
+  overall_quality_score numeric,
+  quality_label text,
+  science_confidence text,
+  regulatory_risk text,
+  financial_risk text,
+  market_expectation_risk text,
+  liquidity_risk text,
+  evidence_conflicts jsonb,
+  missing_evidence jsonb,
+  risk_concentrations jsonb,
+  quality_gate_warnings jsonb,
+  suggested_follow_up_questions jsonb,
+  paper_trade_readiness text,
+  summary text,
+  created_at timestamptz default now()
+);

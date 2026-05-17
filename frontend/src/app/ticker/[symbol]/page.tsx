@@ -1,5 +1,7 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import WorkflowChecklist from '@/features/biotech/components/workflow/WorkflowChecklist';
+import { buildLinkageWarnings, buildWorkflowChecklist, nextBestActions } from '@/features/biotech/lib/workflow/workflowChecklist';
 
 const SOURCE_TYPES = ['manual','company_ir','sec','pubmed','clinical_trials','fda','news','other'] as const;
 
@@ -9,30 +11,173 @@ export default function TickerPage({ params }: { params: { symbol: string } }) {
   const [notes, setNotes] = useState<any[]>([]);
   const [title, setTitle] = useState('');
   const [expectedDate, setExpectedDate] = useState('');
+  const [catalystType, setCatalystType] = useState('manual');
+  const [dateConfidence, setDateConfidence] = useState('low');
+  const [riskLevel, setRiskLevel] = useState('medium');
+  const [catalystDescription, setCatalystDescription] = useState('');
+  const [catalystSourceUrl, setCatalystSourceUrl] = useState('');
   const [noteTitle, setNoteTitle] = useState('');
   const [noteText, setNoteText] = useState('');
   const [sourceUrl, setSourceUrl] = useState('');
   const [sourceType, setSourceType] = useState<(typeof SOURCE_TYPES)[number]>('manual');
   const [attachCatalyst, setAttachCatalyst] = useState('');
   const [structured, setStructured] = useState<any>(null);
+  const [secLoading, setSecLoading] = useState(false);
+  const [secData, setSecData] = useState<any[]>([]);
+  const [secMsg, setSecMsg] = useState('');
+  const [trialLoading, setTrialLoading] = useState(false);
+  const [trials, setTrials] = useState<any[]>([]);
+  const [trialMsg, setTrialMsg] = useState('');
+  const [pubmedQuery, setPubmedQuery] = useState('');
+  const [pubmedLoading, setPubmedLoading] = useState(false);
+  const [pubmed, setPubmed] = useState<any[]>([]);
+  const [pubmedMsg, setPubmedMsg] = useState('');
+  const [fdaQuery, setFdaQuery] = useState('');
+  const [fdaLoading, setFdaLoading] = useState(false);
+  const [fda, setFda] = useState<any[]>([]);
+  const [fdaMsg, setFdaMsg] = useState('');
+  const [market, setMarket] = useState<any>(null);
+  const [marketMsg, setMarketMsg] = useState('');
+  const [marketLoading, setMarketLoading] = useState(false);
+  const [watchlistExists, setWatchlistExists] = useState(false);
+  const [paperTrades, setPaperTrades] = useState<any[]>([]);
+  const [reviews, setReviews] = useState<any[]>([]);
+  const [syntheses, setSyntheses] = useState<any[]>([]);
+  const [theses, setTheses] = useState<any[]>([]);
+  const [fundamentals, setFundamentals] = useState<any[]>([]);
+  const [fundMsg, setFundMsg] = useState('');
+  const [financialModels, setFinancialModels] = useState<any[]>([]);
+  const [modelType, setModelType] = useState('');
+  const [assumptions, setAssumptions] = useState<any>({ revenue_growth_rate:0.1, free_cash_flow_margin:0.2, discount_rate:0.12, terminal_growth_rate:0.02, dilution_percent:0.15 });
+  const [modelMsg, setModelMsg] = useState('');
+  const [packetLoading, setPacketLoading] = useState(false);
+  const [packetResult, setPacketResult] = useState<any>(null);
+  const [packetOptions, setPacketOptions] = useState<any>({ includeSec:true, includeMarketData:true, includeFundamentals:true, includeFinancialModel:true, includeClinicalTrials:true, includePubMed:true, includeFda:true, createDraftThesis:false, runSynthesis:true });
+
 
   async function load() {
-    const [c, n] = await Promise.all([fetch(`/api/catalysts?ticker=${symbol}`), fetch(`/api/research-notes?ticker=${symbol}`)]);
+    const [c, n, w, p, r, syn, th, fr, fm] = await Promise.all([fetch(`/api/catalysts?ticker=${symbol}`), fetch(`/api/research-notes?ticker=${symbol}`), fetch('/api/watchlist'), fetch('/api/paper-trades'), fetch('/api/trade-reviews'), fetch(`/api/thesis-synthesis?ticker=${symbol}`), fetch(`/api/theses?ticker=${symbol}`), fetch(`/api/fundamentals?ticker=${symbol}`), fetch(`/api/financial-models?ticker=${symbol}`)]);
     if (c.ok) setCatalysts(await c.json());
     if (n.ok) setNotes(await n.json());
+    if (w.ok) { const j = await w.json(); setWatchlistExists((j||[]).some((x:any)=>String(x.ticker||'').toUpperCase()===symbol)); }
+    if (p.ok) setPaperTrades((await p.json()).filter((x:any)=>String(x.ticker||'').toUpperCase()===symbol));
+    if (r.ok) setReviews(await r.json());
+    if (syn.ok) setSyntheses(await syn.json());
+    if (th.ok) setTheses(await th.json());
+    if (fr.ok) setFundamentals(await fr.json());
+    if (fm.ok) setFinancialModels(await fm.json());
   }
   useEffect(() => { load(); }, [symbol]);
 
   async function addCatalyst(e: React.FormEvent) {
     e.preventDefault();
-    await fetch('/api/catalysts', { method: 'POST', body: JSON.stringify({ ticker: symbol, title, expected_date: expectedDate, catalyst_type: 'manual', risk_level: 'medium', status: 'upcoming' }) });
-    setTitle(''); setExpectedDate('');
+    await fetch('/api/catalysts', { method: 'POST', body: JSON.stringify({ ticker: symbol, title, expected_date: expectedDate, catalyst_type: catalystType, date_confidence: dateConfidence, risk_level: riskLevel, description: catalystDescription, source_url: catalystSourceUrl || null, status: 'upcoming' }) });
+    setTitle(''); setExpectedDate(''); setCatalystType('manual'); setDateConfidence('low'); setRiskLevel('medium'); setCatalystDescription(''); setCatalystSourceUrl('');
     await load();
   }
 
   async function structureNote() {
     const r = await fetch('/api/research-structure', { method: 'POST', body: JSON.stringify({ ticker: symbol, raw_text: noteText, company: 'missing' }) });
     setStructured(await r.json());
+  }
+
+
+
+
+
+
+  async function refreshMarketData() {
+    setMarketLoading(true); setMarketMsg('');
+    const catalystDate = catalysts?.[0]?.expected_date;
+    const r = await fetch('/api/market/refresh', { method: 'POST', body: JSON.stringify({ ticker: symbol, range: '6mo', catalystDate }) });
+    const j = await r.json();
+    if (!r.ok) setMarketMsg(j.error || 'Market refresh failed. Market data may be delayed.');
+    else setMarket(j);
+    setMarketLoading(false);
+  }
+
+  async function searchFda() {
+    setFdaLoading(true); setFdaMsg('');
+    const q = fdaQuery || `${symbol} safety warning contraindication`;
+    const r = await fetch('/api/fda/ingest', { method: 'POST', body: JSON.stringify({ ticker: symbol, query: q, context: { drug: symbol, company: symbol }, limit: 10 }) });
+    const j = await r.json();
+    if (!r.ok) setFdaMsg(j.error || 'FDA ingestion failed.');
+    else setFda(j.records || []);
+    setFdaLoading(false);
+  }
+
+  async function searchPubMed() {
+    setPubmedLoading(true); setPubmedMsg('');
+    const q = pubmedQuery || `${symbol} mechanism endpoint safety`;
+    const r = await fetch('/api/pubmed/ingest', { method: 'POST', body: JSON.stringify({ ticker: symbol, query: q, context: { drug: symbol }, limit: 10 }) });
+    const j = await r.json();
+    if (!r.ok) setPubmedMsg(j.error || 'PubMed ingestion failed. Set NCBI_TOOL and NCBI_EMAIL.');
+    else setPubmed(j.articles || []);
+    setPubmedLoading(false);
+  }
+
+  async function fetchClinicalTrials() {
+    setTrialLoading(true); setTrialMsg('');
+    const r = await fetch('/api/clinical-trials/ingest', { method: 'POST', body: JSON.stringify({ ticker: symbol, companyName: symbol, limit: 10 }) });
+    const j = await r.json();
+    if (!r.ok) setTrialMsg(j.error || 'ClinicalTrials ingestion failed.');
+    else setTrials(j.trials || []);
+    setTrialLoading(false);
+  }
+
+  async function fetchSecFilings() {
+    setSecLoading(true);
+    setSecMsg('');
+    const r = await fetch('/api/sec/ingest', { method: 'POST', body: JSON.stringify({ ticker: symbol, filingTypes: ['10-Q','10-K','8-K','S-3','S-1','424B5','424B3'], limit: 5 }) });
+    const j = await r.json();
+    if (!r.ok) setSecMsg(j.error || 'SEC ingestion failed. Set SEC_USER_AGENT in environment.');
+    else setSecData(j.filings || []);
+    setSecLoading(false);
+  }
+
+
+  const checklist = useMemo(()=>buildWorkflowChecklist({
+    watchlist_exists: watchlistExists,
+    sec_count: secData.length,
+    clinical_trials_count: trials.length,
+    pubmed_count: pubmed.length,
+    fda_count: fda.length,
+    market_refreshed: !!market,
+    catalyst_count: catalysts.length,
+    thesis_exists: theses.length>0,
+    synthesis_exists: syntheses.length>0,
+    paper_trade_exists: paperTrades.length>0,
+    review_exists: reviews.some((x:any)=>paperTrades.some((t:any)=>String(t.id)===String(x.paper_trade_id))),
+  }), [watchlistExists,secData,trials,pubmed,fda,market,catalysts,theses,syntheses,paperTrades,reviews]);
+  const actions = useMemo(()=>nextBestActions(checklist),[checklist]);
+  const linkageWarnings = useMemo(()=>buildLinkageWarnings({ paper_trades: paperTrades, syntheses, catalysts, theses }), [paperTrades, syntheses, catalysts, theses]);
+
+
+  async function analyzeFundamentals(){
+    setFundMsg('');
+    const r = await fetch('/api/fundamentals/analyze', { method:'POST', body: JSON.stringify({ ticker: symbol, companyName: symbol, includeSec:true, includeMarketData:true, includePipelineContext:true }) });
+    const j = await r.json();
+    if(!r.ok) setFundMsg(j.error||'Fundamental analysis failed.');
+    else { setFundMsg('Fundamental research report updated (paper-trading analysis only).'); await load(); }
+  }
+
+
+  async function buildFinancialModel(){
+    setModelMsg('');
+    const r = await fetch('/api/financial-models/build', { method:'POST', body: JSON.stringify({ ticker:symbol, model_type:modelType||null, assumptions:{...assumptions, dilution_assumptions:{ dilution_percent:Number(assumptions.dilution_percent||0) }}, selected_sources:['fundamentals','market','clinical_trials'] }) });
+    const j=await r.json();
+    if(!r.ok) setModelMsg(j.error||'Financial model build failed.');
+    else { setModelMsg('Financial valuation model updated (paper-trading analysis only).'); await load(); }
+  }
+
+
+  async function runResearchPacket(){
+    setPacketLoading(true); setPacketResult(null);
+    const r = await fetch('/api/research-packet', { method:'POST', body: JSON.stringify({ ticker:symbol, options:packetOptions }) });
+    const j = await r.json();
+    setPacketResult(j);
+    setPacketLoading(false);
+    if(r.ok) await load();
   }
 
   async function saveNote(e: React.FormEvent) {
@@ -45,15 +190,152 @@ export default function TickerPage({ params }: { params: { symbol: string } }) {
   return <div className="p-6 space-y-4">
     <h1 className="text-2xl font-semibold">{symbol} detail</h1>
     <div className="bg-zinc-900 border border-zinc-800 rounded p-4">Company summary: missing</div>
+    <WorkflowChecklist status={checklist} actions={actions} />
+    <div className="bg-zinc-900 border border-zinc-800 rounded p-3 text-xs"><b>Linked Research Objects</b> • theses {theses.length} • syntheses {syntheses.length} • open paper trades {paperTrades.filter((t:any)=>t.status==='open').length} • reviews {reviews.filter((x:any)=>paperTrades.some((t:any)=>String(t.id)===String(x.paper_trade_id))).length}{linkageWarnings.length>0 && <div className='text-amber-300 mt-1'>Warnings: {linkageWarnings.join(' | ')}</div>}</div>
+    <div className="text-xs text-zinc-400">Quick links: <a className="text-blue-400" href={`/thesis/new?ticker=${symbol}`}>Thesis builder</a> • <a className="text-blue-400" href={`/paper-trades`}>Paper trades</a> • <a className="text-blue-400" href={`/review`}>Post-event review</a> • <a className="text-blue-400" href={`/analytics`}>Analytics</a></div>
     <div className="bg-zinc-900 border border-zinc-800 rounded p-4">Pipeline: missing</div>
+    <div className='bg-zinc-900 border border-zinc-800 rounded p-4 space-y-2'>
+      <h2 className='font-semibold'>Fundamentals</h2>
+      <button className='bg-blue-600 rounded px-3 py-2' onClick={analyzeFundamentals}>Analyze fundamentals</button>
+      {fundMsg && <div className='text-sm text-amber-300'>{fundMsg}</div>}
+      {(fundamentals||[]).length===0 ? <div className='text-sm text-zinc-400'>No fundamental research report yet.</div> : <div className='text-sm space-y-1'>
+        <div>Company type: <b>{fundamentals[0].company_type}</b></div>
+        <div>Cash/runway: {fundamentals[0].financial_snapshot?.cash_and_equivalents ?? 'missing'} / {fundamentals[0].financial_snapshot?.estimated_runway_quarters ?? 'missing'} qtrs</div>
+        <div>Profitability/revenue: {fundamentals[0].financial_snapshot?.net_income ?? 'missing'} / {fundamentals[0].financial_snapshot?.revenue ?? 'missing'}</div>
+        <div>Valuation: P/S {fundamentals[0].valuation_metrics?.price_to_sales ?? 'missing'} | EV/S {fundamentals[0].valuation_metrics?.enterprise_value_to_sales ?? 'missing'}</div>
+        <div>Dilution risk: {fundamentals[0].biotech_specific_metrics?.dilution_risk ?? 'missing'}</div>
+        <div>Concentration: {fundamentals[0].biotech_specific_metrics?.product_concentration_risk ?? 'missing'}</div>
+        <div>Bull/Base/Bear: {fundamentals[0].bull_case} | {fundamentals[0].base_case} | {fundamentals[0].bear_case}</div>
+        <div>Missing data: {(fundamentals[0].missing_data||[]).join(', ') || 'none'}</div>
+        <a className='text-blue-400 text-xs' href={`/thesis/new?ticker=${symbol}`}>Use in thesis</a>
+      </div>}
+    </div>
+
+
+    <div className='bg-zinc-900 border border-zinc-800 rounded p-4 space-y-2'>
+      <h2 className='font-semibold'>Research Packet</h2>
+      <div className='text-xs text-zinc-400'>One-click public-source research packet for paper-trading analysis only. Not investment advice and not predictive.</div>
+      <div className='grid grid-cols-3 gap-2 text-xs'>
+        {Object.keys(packetOptions).map((k)=> <label key={k} className='flex items-center gap-1'><input type='checkbox' checked={!!packetOptions[k]} onChange={e=>setPacketOptions({...packetOptions,[k]:e.target.checked})} /> {k}</label>)}
+      </div>
+      <button className='bg-blue-600 rounded px-3 py-2' onClick={runResearchPacket} disabled={packetLoading}>{packetLoading?'Running...':'Research this company'}</button>
+      {packetResult && <div className='text-sm space-y-1'>
+        <div>Status: <b>{packetResult.status}</b></div>
+        <div>Missing: {(packetResult.missing_data||[]).join(', ') || 'none'}</div>
+        <div>Warnings: {(packetResult.warnings||[]).join(' | ') || 'none'}</div>
+        <div>Next actions: {(packetResult.research_packet_summary?.suggested_follow_up_questions||[]).join(' | ')}</div>
+        <div className='text-xs'>Steps: {(packetResult.steps||[]).map((s:any)=>`${s.step}:${s.status}`).join(' | ')}</div>
+      </div>}
+    </div>
+
+    <div className='bg-zinc-900 border border-zinc-800 rounded p-4 space-y-2'>
+      <h2 className='font-semibold'>Financial Model</h2>
+      <div className='text-xs text-zinc-400'>Valuation model with user-editable assumptions for paper-trading analysis only; not investment advice and not predictive.</div>
+      <div className='grid grid-cols-3 gap-2 text-sm'>
+        <select className='bg-zinc-800 p-2 rounded' value={modelType} onChange={e=>setModelType(e.target.value)}><option value=''>Auto model type</option><option value='dcf'>DCF</option><option value='risk_adjusted_pipeline'>Risk-adjusted pipeline</option><option value='hybrid'>Hybrid</option></select>
+        <input className='bg-zinc-800 p-2 rounded' value={assumptions.revenue_growth_rate} onChange={e=>setAssumptions({...assumptions,revenue_growth_rate:Number(e.target.value)})} placeholder='Revenue growth'/>
+        <input className='bg-zinc-800 p-2 rounded' value={assumptions.free_cash_flow_margin} onChange={e=>setAssumptions({...assumptions,free_cash_flow_margin:Number(e.target.value)})} placeholder='FCF margin'/>
+        <input className='bg-zinc-800 p-2 rounded' value={assumptions.discount_rate} onChange={e=>setAssumptions({...assumptions,discount_rate:Number(e.target.value)})} placeholder='Discount rate'/>
+        <input className='bg-zinc-800 p-2 rounded' value={assumptions.terminal_growth_rate} onChange={e=>setAssumptions({...assumptions,terminal_growth_rate:Number(e.target.value)})} placeholder='Terminal growth'/>
+        <input className='bg-zinc-800 p-2 rounded' value={assumptions.dilution_percent} onChange={e=>setAssumptions({...assumptions,dilution_percent:Number(e.target.value)})} placeholder='Dilution %'/>
+      </div>
+      <button className='bg-blue-600 rounded px-3 py-2' onClick={buildFinancialModel}>Build model</button>
+      {modelMsg && <div className='text-sm text-amber-300'>{modelMsg}</div>}
+      {(financialModels||[]).length===0 ? <div className='text-sm text-zinc-400'>No financial model yet.</div> : <div className='text-sm'>
+        <div>Suggested type: <b>{financialModels[0].model_type}</b></div>
+        <div>Intrinsic/share vs price: {financialModels[0].model_output?.intrinsic_value_per_share ?? 'missing'} vs {financialModels[0].model_output?.current_price ?? 'missing'} ({financialModels[0].model_output?.upside_downside_percent ?? 'missing'}%)</div>
+        <div>Scenario: {(financialModels[0].scenario_analysis?.scenario_table||[]).map((x:any)=>`${x.scenario}:${x.upside_downside_percent}`).join(' | ')}</div>
+        <div>Warnings: {(financialModels[0].model_output?.warnings||[]).join(' | ') || 'none'}</div>
+        <a className='text-blue-400 text-xs' href={`/thesis/new?ticker=${symbol}`}>Use in thesis</a>
+      </div>}
+    </div>
+
     <div className="bg-zinc-900 border border-zinc-800 rounded p-4">
       <h2 className="font-semibold">Manual Catalysts</h2>
-      <form onSubmit={addCatalyst} className="flex gap-2 my-2">
+      <form onSubmit={addCatalyst} className="grid grid-cols-3 gap-2 my-2">
         <input className="bg-zinc-800 p-2 rounded" placeholder="Catalyst title" value={title} onChange={e => setTitle(e.target.value)} required />
         <input className="bg-zinc-800 p-2 rounded" type="date" value={expectedDate} onChange={e => setExpectedDate(e.target.value)} required />
-        <button className="bg-blue-600 rounded px-3">Add</button>
+        <select className="bg-zinc-800 p-2 rounded" value={catalystType} onChange={e=>setCatalystType(e.target.value)}><option value="manual">manual</option><option value="trial_data">trial_data</option><option value="completion_update">completion_update</option></select>
+        <select className="bg-zinc-800 p-2 rounded" value={dateConfidence} onChange={e=>setDateConfidence(e.target.value)}><option>low</option><option>moderate</option><option>high</option></select>
+        <select className="bg-zinc-800 p-2 rounded" value={riskLevel} onChange={e=>setRiskLevel(e.target.value)}><option>low</option><option>medium</option><option>high</option></select>
+        <input className="bg-zinc-800 p-2 rounded" placeholder="Source URL" value={catalystSourceUrl} onChange={e=>setCatalystSourceUrl(e.target.value)} />
+        <input className="bg-zinc-800 p-2 rounded col-span-3" placeholder="Description" value={catalystDescription} onChange={e=>setCatalystDescription(e.target.value)} />
+        <button className="bg-blue-600 rounded px-3 col-span-3">Add</button>
       </form>
-      {catalysts.length === 0 ? <div className="text-sm text-zinc-400">No catalysts</div> : catalysts.map(c => <div key={c.id} className="text-sm py-1">{c.expected_date}: {c.title}</div>)}
+      {catalysts.length === 0 ? <div className="text-sm text-zinc-400">No catalysts yet. Add a possible catalyst window to unlock downstream workflow.</div> : catalysts.map(c => <div key={c.id} className="text-sm py-1">{c.expected_date}: {c.title}</div>)}
+    </div>
+
+
+
+    <div className="bg-zinc-900 border border-zinc-800 rounded p-4 space-y-2">
+      <h2 className="font-semibold">SEC Filings</h2>
+      <div className="flex gap-2">
+        <button className="bg-blue-600 rounded px-3 py-2" onClick={fetchSecFilings} disabled={secLoading}>{secLoading ? 'Fetching…' : 'Fetch SEC filings'}</button>
+        <span className="text-xs text-zinc-400">Uses public EDGAR data only.</span>
+      </div>
+      {secMsg && <div className="text-sm text-amber-300">{secMsg}</div>}
+      {secData.length === 0 ? <div className="text-sm text-zinc-400">No SEC filings fetched yet.</div> : secData.map((f:any) => (
+        <div key={f.accessionNumber} className="border-t border-zinc-800 py-2 text-sm">
+          <div><b>{f.filingType}</b> {f.filingDate} • {f.accessionNumber}</div>
+          <a className="text-blue-400 text-xs" href={f.url} target="_blank">Source filing</a>
+          <div className="text-xs text-zinc-400">Dilution flags: {(f.extracted?.dilution_mentions || []).slice(0,2).join(' | ') || 'missing'}</div>
+          <div className="text-xs text-zinc-400">Runway language: {(f.extracted?.runway_mentions || []).slice(0,2).join(' | ') || 'missing'}</div>
+          <a className="text-blue-400 text-xs" href={`/thesis/new?ticker=${symbol}`}>Use in thesis</a>
+        </div>
+      ))}
+    </div>
+
+
+    <div className="bg-zinc-900 border border-zinc-800 rounded p-4 space-y-2">
+      <h2 className="font-semibold">Clinical Trials</h2>
+      <button className="bg-blue-600 rounded px-3 py-2" onClick={fetchClinicalTrials} disabled={trialLoading}>{trialLoading ? 'Fetching…' : 'Fetch clinical trials'}</button>
+      {trialMsg && <div className="text-sm text-amber-300">{trialMsg}</div>}
+      {trials.length === 0 ? <div className="text-sm text-zinc-400">No ClinicalTrials records yet. Try again later or adjust company/ticker assumptions.</div> : trials.map((x:any) => {
+        const t = x.trial;
+        return <div key={t.nct_id} className="border-t border-zinc-800 py-2 text-sm"> 
+          <div><b>{t.nct_id}</b> • {t.phase} • {t.status}</div>
+          <div>{t.brief_title}</div>
+          <div className="text-zinc-400">Condition: {(t.conditions||[])[0] || 'missing'} | Intervention: {(t.interventions||[])[0] || 'missing'} | Enrollment: {t.enrollment}</div>
+          <div className="text-zinc-400">Primary endpoint: {(t.primary_endpoints||[])[0] || 'missing'}</div>
+          <div className="text-zinc-400">Primary completion: {t.primary_completion_date}</div>
+          <div className="text-zinc-400">Potential catalyst: {x.potentialCatalyst.title} ({x.potentialCatalyst.expected_date})</div>
+          <a className="text-blue-400 text-xs mr-3" href={t.source_url} target="_blank">Source</a>
+          <button className="text-blue-400 text-xs mr-3" onClick={() => { setTitle(x.potentialCatalyst.title); setExpectedDate(x.potentialCatalyst.expected_date === 'missing' ? '' : x.potentialCatalyst.expected_date); setCatalystType(x.potentialCatalyst.catalyst_type); setDateConfidence(x.potentialCatalyst.date_confidence); setRiskLevel(x.potentialCatalyst.risk_level); setCatalystDescription(x.potentialCatalyst.description); setCatalystSourceUrl(t.source_url); }}>Create potential catalyst</button>
+          <a className="text-blue-400 text-xs" href={`/thesis/new?ticker=${symbol}`}>Use in thesis</a>
+        </div>
+      })}
+    </div>
+
+
+    <div className="bg-zinc-900 border border-zinc-800 rounded p-4 space-y-2">
+      <h2 className="font-semibold">PubMed Literature</h2>
+      <div className="flex gap-2"><input className="bg-zinc-800 p-2 rounded flex-1" placeholder="Search PubMed query" value={pubmedQuery} onChange={e=>setPubmedQuery(e.target.value)} />
+      <button className="bg-blue-600 rounded px-3 py-2" onClick={searchPubMed} disabled={pubmedLoading}>{pubmedLoading ? 'Searching…' : 'Search PubMed'}</button></div>
+      {pubmedMsg && <div className="text-sm text-amber-300">{pubmedMsg}</div>}
+      {pubmed.length===0 ? <div className="text-sm text-zinc-400">No PubMed results yet. Provider may be unavailable or query may be too narrow.</div> : pubmed.map((a:any)=><div key={a.pmid} className="border-t border-zinc-800 py-2 text-sm"><div><b>PMID {a.pmid}</b> {a.title}</div><div className="text-zinc-400">{a.journal} {a.publication_date} relevance {a.relevance_score}</div><div className="text-zinc-400">{String(a.abstract||'').slice(0,180)}</div><a className="text-blue-400 text-xs" href={`/thesis/new?ticker=${symbol}`}>Use in thesis</a></div>)}
+    </div>
+
+
+    <div className="bg-zinc-900 border border-zinc-800 rounded p-4 space-y-2">
+      <h2 className="font-semibold">FDA Regulatory Sources</h2>
+      <div className="flex gap-2"><input className="bg-zinc-800 p-2 rounded flex-1" placeholder="Search FDA query" value={fdaQuery} onChange={e=>setFdaQuery(e.target.value)} />
+      <button className="bg-blue-600 rounded px-3 py-2" onClick={searchFda} disabled={fdaLoading}>{fdaLoading ? 'Searching…' : 'Search FDA'}</button></div>
+      {fdaMsg && <div className="text-sm text-amber-300">{fdaMsg}</div>}
+      {fda.length===0 ? <div className="text-sm text-zinc-400">No FDA results yet. Try broader safety/label terms or retry later.</div> : fda.map((r:any)=><div key={r.fda_source_id+r.title} className="border-t border-zinc-800 py-2 text-sm"><div><b>{r.source_kind}</b> {r.title}</div><div className="text-zinc-400">{r.drug_name} • {r.sponsor} • {r.approval_date}</div><div className="text-zinc-400">Regulatory context: boxed {(r.regulatory_signals?.boxed_warning||[]).length}, contraindications {(r.regulatory_signals?.contraindications||[]).length}, advisory {(r.regulatory_signals?.advisory_committee_concerns||[]).length}</div><a className="text-blue-400 text-xs" href={`/thesis/new?ticker=${symbol}`}>Use in thesis</a></div>)}
+    </div>
+
+
+    <div className="bg-zinc-900 border border-zinc-800 rounded p-4 space-y-2">
+      <h2 className="font-semibold">Market Data</h2>
+      <button className="bg-blue-600 rounded px-3 py-2" onClick={refreshMarketData} disabled={marketLoading}>{marketLoading ? 'Refreshing…' : 'Refresh market data'}</button>
+      {marketMsg && <div className="text-sm text-amber-300">{marketMsg}</div>}
+      {!market ? <div className="text-sm text-zinc-400">No market data loaded. Paper-trading analysis only. Market data may be delayed.</div> : <div className="text-sm space-y-1">
+        <div>Quote: {market.quote?.price ?? 'missing'} ({market.quote?.provider}) {market.quote?.delayed ? 'delayed' : 'real-time unknown'}</div>
+        <div>Market cap: {market.quote?.market_cap ?? 'missing'} | Volume: {market.quote?.volume ?? 'missing'} vs avg {market.quote?.average_volume ?? 'missing'}</div>
+        <div>Liquidity flags: {(market.derived?.liquidity_flags || []).join(' | ') || 'missing'}</div>
+        <div>Volatility summary (approximate): {JSON.stringify(market.derived?.volatility_summary || {})}</div>
+        <div>Pre-catalyst run-up (approximate): {JSON.stringify(market.derived?.pre_catalyst_runup || {})}</div>
+      </div>}
     </div>
 
     <div className="bg-zinc-900 border border-zinc-800 rounded p-4 space-y-3">

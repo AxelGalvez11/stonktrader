@@ -1,0 +1,3 @@
+export default function CatalystAlertsPanel({ alerts }: { alerts: any[] }) {
+  return <div className="space-y-2">{alerts.map((a,i)=><div key={i} className="bg-zinc-900 border border-zinc-800 rounded p-3 text-sm"><div><b>{a.severity.toUpperCase()}</b> {a.ticker} — {a.title}</div><div>{a.message}</div><div className="text-zinc-400">{a.recommended_action}</div><div className="text-xs"><a className="text-blue-400 mr-2" href={`/ticker/${a.ticker}`}>Open ticker</a><a className="text-blue-400 mr-2" href={`/thesis/new?ticker=${a.ticker}`}>Build thesis</a><a className="text-blue-400 mr-2" href={`/paper-trades`}>Create paper trade</a><a className="text-blue-400" href={`/review`}>Review trade</a></div></div>)}</div>;
+}
