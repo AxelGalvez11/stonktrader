@@ -1,0 +1,13 @@
+alter table trade_reviews add column if not exists catalyst_outcome text;
+alter table trade_reviews add column if not exists actual_event_date date;
+alter table trade_reviews add column if not exists stock_reaction_percent text;
+alter table trade_reviews add column if not exists exit_price numeric;
+alter table trade_reviews add column if not exists result_percent numeric;
+alter table trade_reviews add column if not exists result_dollars numeric;
+alter table trade_reviews add column if not exists scientific_notes text;
+alter table trade_reviews add column if not exists financial_notes text;
+alter table trade_reviews add column if not exists market_reaction_notes text;
+alter table trade_reviews add column if not exists user_reflection text;
+alter table trade_reviews add column if not exists mistake_category text;
+alter table trade_reviews add column if not exists lesson_learned text;
+alter table trade_reviews add column if not exists future_rule text;

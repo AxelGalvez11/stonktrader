@@ -50,6 +50,7 @@ export interface MemeCoinRanking {
   return_1h: number;
   return_24h: number;
   volume_change_24h: number;
+  volume_24h?: number;
   mention_growth_24h: number;
   sentiment_score: number;
   liquidity_score: number;
@@ -113,6 +114,8 @@ export interface PaperTradeCreate {
   take_profit?: number;
   size_usd?: number;
   thesis?: string;
+  quantity?: number;
+  notes?: string;
 }
 
 export interface PaperTrade {
@@ -129,6 +132,8 @@ export interface PaperTrade {
   exit_price: number | null;
   exit_at: string | null;
   created_at: string;
+  opened_at?: string;
+  quantity?: number;
   pnl: number | null;
   pnl_pct: number | null;
 }
@@ -158,6 +163,8 @@ export interface AppSettings {
   memecoin_universe_size: number;
   polymarket_weight: number;
   demo_mode: boolean;
+  auto_refresh?: boolean;
+  refresh_interval_seconds?: number;
 }
 
 // ── Integrations ─────────────────────────────────────────────────────────
